@@ -699,6 +699,32 @@ The scanner finds dot access and static bracket keys through simple local aliase
 
 `--schema` is opt-in: without it, `check` only compares key presence. With it, `check` loads the schema file (`module.exports = { PORT: { type: 'port', required: true } }`, resolved relative to the checked directory) and runs the same `validateEnv` the library uses over the values of the real `.env` file. A type error is reported as `INVALID: PORT: expected a port (0-65535, e.g. 3000), got "not-a-port"` and fails the check (exit 1); in `--json` mode the failures appear in the `invalid` field. An explicit `--file` names the file to validate instead; with no `.env` file and no explicit `--file`, the schema step is skipped — the template's placeholders are not real values. A schema file that cannot be loaded (or does not export a schema object) is a usage error: a clear message and exit 2. With `--json-schema`, `check` prints the `--schema` file as a draft 2020-12 JSON Schema document to stdout instead of running the check, so editors and CI validators can consume it directly; the `.env.example` is never read, so a schema converts even before an example file exists. Without `--schema` there is nothing to convert, so the flag is a usage error (exit 2).
 
+### CLI exit codes
+
+The CLI uses its process exit status as the signal for scripts and CI:
+
+| Exit code | Meaning | Typical cases |
+| --- | --- | --- |
+| `0` | The command completed successfully. | A clean `check`; a completed `scan` (including `UNUSED` warnings); generated `example` output; a successful `init`. |
+| `1` | The command ran, but found a project problem or refused a requested write. | `check` found missing, extra, unused or invalid values; `example --write` found no variables or would overwrite an existing file; `init` would overwrite an existing scaffold. |
+| `2` | The invocation or required input is invalid. | An unsupported flag, a missing/non-directory scan path, a missing `check` template, or a missing `init --from-example` input. |
+
+A few command-specific details matter in CI:
+
+- **`check`** exits `1` for any drift or schema-validation finding. `UNUSED` counts as a finding too. A fresh scaffold with no code reads is the deliberate exception: unused template keys are reported as one note and the check passes until the project starts reading variables.
+- **`scan`** exits `0` after a successful scan. An `UNUSED` warning is informational and does not change the exit code; use `check` when unused template keys should fail the build.
+- **`example`** prints a draft and exits `0`. With `--write`, it exits `1` rather than writing a header-only file when no variables are found, or when the target already exists and `--force` was not supplied.
+- **`init`** exits `0` after writing the starter files. It exits `1` when an existing output would be overwritten without `--force`; invalid paths, flags, or a missing `--from-example` input are usage/input errors (exit `2`).
+
+For `check --json`, the `ok` field and process exit status agree: `ok: true` exits `0`, and `ok: false` exits `1`. Usage errors still exit `2` (and, when `--json` is active, print an error object). `scan --json` reports `ok: true` when the scan completes; unused keys remain warnings.
+
+A CI step can rely on the exit status directly:
+
+```yaml
+- name: Check environment usage against the template
+  run: npx env-saaf check . --json
+```
+
 ### Run `check` in GitHub Actions
 
 A minimal workflow that fails a pull request when the code and `.env.example` drift apart. Copy it to `.github/workflows/env-check.yml`:
