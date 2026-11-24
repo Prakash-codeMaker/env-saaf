@@ -2131,7 +2131,7 @@ assert.deepStrictEqual(
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', default: 5000 } }, {}).TIMEOUT, 5000);
   // min/max work on the millisecond result like on any other number.
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '30s' }).TIMEOUT, 30000);
-  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '500ms' }), /expected a number at least 1000/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '500ms' }), /expected a duration at least 1000ms/);
   // Unknown units, negatives and malformed values are rejected, naming the key.
   for (const bad of ['15x', '15min', '15sec', '-5m', '-1', 'm', '1.2.3h', '1e3s']) {
     assert.throws(() => validateEnv(schema, { TIMEOUT: bad }), /expected a duration/);
@@ -2146,7 +2146,7 @@ assert.deepStrictEqual(
   assert.strictEqual(validateEnv(schema, { TIMEOUT: '1.5w' }).TIMEOUT, 907200000);
   assert.strictEqual(validateEnv(schema, { TIMEOUT: ' 1 w ' }).TIMEOUT, 604800000);
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', max: 604800000 } }, { TIMEOUT: '1w' }).TIMEOUT, 604800000);
-  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', max: 604800000 } }, { TIMEOUT: '2w' }), /expected a number at most 604800000/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', max: 604800000 } }, { TIMEOUT: '2w' }), /expected a duration at most 604800000ms/);
   // Existing units keep their values, and wrong week spellings are still rejected.
   assert.strictEqual(validateEnv(schema, { TIMEOUT: '7d' }).TIMEOUT, validateEnv(schema, { TIMEOUT: '1w' }).TIMEOUT);
   assert.strictEqual(validateEnv(schema, { TIMEOUT: '1d' }).TIMEOUT, 86400000);
@@ -2165,7 +2165,7 @@ assert.deepStrictEqual(
   assert.strictEqual(validateEnv(schema, { TIMEOUT: '1w1d' }).TIMEOUT, 691200000);
   // min/max apply to the summed total.
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', max: 5400000 } }, { TIMEOUT: '1h30m' }).TIMEOUT, 5400000);
-  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', max: 5399999 } }, { TIMEOUT: '1h30m' }), /expected a number at most 5399999/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', max: 5399999 } }, { TIMEOUT: '1h30m' }), /expected a duration at most 5399999ms/);
   // A trailing bare number, a leading unit and mixed junk are rejected.
   for (const bad of ['1h30', 'h30m', '1h30x', '1h 30', '1h30min']) {
     assert.throws(() => validateEnv(schema, { TIMEOUT: bad }), /expected a duration/);
