@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed: `duration` min/max validation errors now show explicit units: numeric bounds are rendered as milliseconds (e.g. `1000ms`), while string duration bounds retain their readable form; `number` and `int` diagnostics are unchanged (fixes #341).
 - Docs: document CLI exit codes and JSON results for `check`, `scan`, `example` and `init` (fixes #360).
 
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
