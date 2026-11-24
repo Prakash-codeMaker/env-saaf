@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tests: add a package smoke test that packs env-saaf, installs the tarball into CommonJS and ESM projects, exercises the installed CLI, and type-checks an installed-package consumer (fixes #368).
+
 - Docs: document CLI exit codes and JSON results for `check`, `scan`, `example` and `init` (fixes #360).
 
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
