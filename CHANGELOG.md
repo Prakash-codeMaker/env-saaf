@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: `validateSchema` rejects `required: true` together with `default`, including inside grouped schemas, so the default cannot silently make the required check unreachable (fixes #340).
+
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
 
 - Fixed: `parseEnvFile` now expands `\n` and `\r` escape sequences in double-quoted values (dotenv parity), so a PEM key written as `"-----BEGIN-----\n..."` loads with real newlines; `\\` stays a single backslash and single-quoted values are unchanged (fixes #333).
