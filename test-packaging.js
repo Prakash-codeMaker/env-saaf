@@ -51,7 +51,7 @@ function installTarball(name, tarball) {
 try {
   const packedDir = path.join(scratch, 'packed');
   fs.mkdirSync(packedDir);
-  const pack = run(NPM, ['pack', '--json', '--pack-destination', packedDir], ROOT);
+  const pack = run(NPM, ['pack', '--json', '--pack-destination', packedDir], ROOT, process.platform === 'win32');
   const results = JSON.parse(pack.stdout);
   assert.strictEqual(results.length, 1, 'npm pack should create exactly one tarball');
   const tarball = path.join(packedDir, results[0].filename);
