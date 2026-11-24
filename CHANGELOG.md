@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tests: add 300 deterministic generated `scanCode` cases spanning real reads, comments, strings, template text, regex decoys, duplicate occurrences and output ordering (fixes #366).
+
 - Docs: document CLI exit codes and JSON results for `check`, `scan`, `example` and `init` (fixes #360).
 
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
