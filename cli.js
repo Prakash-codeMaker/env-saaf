@@ -544,9 +544,11 @@ async function runCheck() {
   // is skipped. Failures land in the existing `invalid` field (the library's
   // errors already name the key) and fail the check like a missing key.
   let invalid = [];
+  let valuesFileFound = null;
   if (schemaOpt) {
     const schema = await loadSchemaFile();
     const targetName = fileExplicit ? fileOpt : (fs.existsSync(envPath) ? '.env' : null);
+    valuesFileFound = targetName !== null;
     if (targetName) {
       const values = readEnvFile(path.join(dir, targetName));
       try {
@@ -582,11 +584,16 @@ async function runCheck() {
       envExtra,
       envMissing,
     };
+    if (schemaOpt) result.valuesFileFound = valuesFileFound;
     if (scaffoldAhead) result.note = scaffoldNote;
     console.log(JSON.stringify(result));
-  } else if (scaffoldAhead) {
-    console.log(`env-saaf: ${scaffoldNote}.`);
   } else {
+    if (schemaOpt && !valuesFileFound) {
+      console.log('env-saaf: no .env file found — schema values were not validated.');
+    }
+    if (scaffoldAhead) {
+      console.log(`env-saaf: ${scaffoldNote}.`);
+    } else {
     usedNotDocumented.forEach(k => console.log(`MISSING in ${fileOpt}: ${k} (used in code)`));
     documentedNotUsed.forEach(k => console.log(`UNUSED: ${k} (in ${fileOpt}, never used in code)`));
     envExtra.forEach(k => console.log(`EXTRA in .env: ${k} (not in ${fileOpt})`));
@@ -594,6 +601,7 @@ async function runCheck() {
     invalid.forEach(e => console.log(`INVALID: ${e}`));
     if (!usedNotDocumented.length && !documentedNotUsed.length && !envExtra.length && !envMissing.length && !invalid.length) {
       console.log(`env-saaf: all clean — code and ${fileOpt} match.`);
+    }
     }
   }
   // Issue #113: the exit code follows the same `ok` the JSON output reports, so a
