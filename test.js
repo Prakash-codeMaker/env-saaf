@@ -28,7 +28,12 @@ const { loadEnv, validateEnv, validateSchema, EnvSaafError, parseEnvFile, scanCo
   assert.throws(() => validateEnv({ T: { type: 'duration', min: 'soon' } }, {}, { throwOnError: false }), /Invalid schema/);
   assert.throws(() => validateEnv({ T: { type: 'duration', min: '30s', default: '1s' } }, {}), /at least 30s/);
   assert.strictEqual(validateEnv({ T: { type: 'duration', min: -1, max: 500 } }, { T: '500' }).T, 500);
-  assert.throws(() => validateEnv({ T: { type: 'duration', min: 1000 } }, { T: '500' }), /at least 1000/);
+  assert.throws(() => validateEnv({ T: { type: 'duration', min: 1000 } }, { T: '500' }), /expected a duration at least 1000ms/);
+  assert.throws(() => validateEnv({ T: { type: 'duration', min: 1000, max: 2000 } }, { T: '500' }), /expected a duration between 1000ms and 2000ms/);
+  assert.throws(() => validateEnv({ T: { type: 'duration', min: '1s', max: '2s' } }, { T: '500ms' }), /expected a duration between 1s and 2s/);
+  assert.throws(() => validateEnv({ T: { type: 'duration', max: 2000 } }, { T: '3s' }), /expected a duration at most 2000ms/);
+  assert.throws(() => validateEnv({ T: { type: 'number', min: 1000, max: 2000 } }, { T: '500' }), /expected a number 1000–2000/);
+  assert.throws(() => validateEnv({ T: { type: 'int', min: 1 } }, { T: '0' }), /expected a number at least 1/);
   assert.throws(() => validateSchema({ T: { type: 'number', min: '30s' } }), /must be a number/);
   const grouped = { API: { prefix: 'API_', schema: { TIMEOUT: rule } } };
   assert.strictEqual(validateEnv(grouped, { API_TIMEOUT: '30s' }).API.TIMEOUT, 30000);
