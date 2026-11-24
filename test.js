@@ -6966,3 +6966,74 @@ Promise.all([watchModeTest, watchModeErrorPathTest, watchModeEsmSchemaTest, load
   assert.deepStrictEqual(values(example), values(generateExample(plain)));
   assert.ok(!generateExample(plain).includes('pattern:'));
 }
+
+
+// Issue #366: deterministic generated coverage for the scanCode masking state machine.
+{
+  function seededRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x100000000;
+    };
+  }
+
+  const tick = String.fromCharCode(96);
+  const realForms = [
+    key => 'process.env.' + key + ';',
+    key => "process.env['" + key + "'];",
+    key => 'process.env[' + tick + key + tick + '];',
+    key => 'const { ' + key + ' } = process.env;',
+    key => 'const { ' + key + ': alias_' + key + ' } = process.env;',
+    key => 'import.meta.env.' + key + ';',
+    key => "import.meta.env['" + key + "'];",
+    key => 'const { ' + key + ' } = import.meta.env;',
+    key => 'const value_' + key + ' = ' + tick + '$' + '{process.env.' + key + '}' + tick + ';',
+    key => 'process.env?.' + key + ';',
+  ];
+  const decoyForms = [
+    key => '// process.env.' + key,
+    key => '/* process.env.' + key + ' */',
+    (key, n) => "const string_" + n + " = 'process.env." + key + "';",
+    (key, n) => 'const template_' + n + ' = ' + tick + 'process.env.' + key + tick + ';',
+    (key, n) => 'const regex_' + n + ' = /process.env.' + key + '/;',
+    (key, n) => 'const viteString_' + n + ' = "import.meta.env.' + key + '";',
+  ];
+
+  for (let caseNo = 0; caseNo < 300; caseNo++) {
+    const seed = 0x5eed0000 + caseNo;
+    const random = seededRandom(seed);
+    const choose = list => list[Math.floor(random() * list.length)];
+    const source = [];
+    const expected = new Set();
+
+    for (let fragment = 0; fragment < 8; fragment++) {
+      const key = 'REAL_' + caseNo + '_' + fragment;
+      expected.add(key);
+      source.push(choose(realForms)(key));
+    }
+    for (let fragment = 0; fragment < 8; fragment++) {
+      const key = 'DECOY_' + caseNo + '_' + fragment;
+      source.push(choose(decoyForms)(key, caseNo + '_' + fragment));
+    }
+
+    // Repeated occurrences and random ordering must not affect sorted uniqueness.
+    if (random() > 0.5) source.push('process.env.REAL_' + caseNo + '_0;');
+    if (random() > 0.5) source.push('import.meta.env.REAL_' + caseNo + '_1;');
+    for (let i = source.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [source[i], source[j]] = [source[j], source[i]];
+    }
+
+    const snippet = source.join(random() > 0.5 ? '\n' : '\n\n');
+    const actual = scanCode(snippet);
+    const wanted = [...expected].sort();
+    try {
+      assert.deepStrictEqual(actual, wanted);
+      assert.deepStrictEqual(actual, [...new Set(actual)].sort());
+    } catch (error) {
+      error.message += '\nseed: ' + seed + '\nsource:\n' + snippet;
+      throw error;
+    }
+  }
+}
