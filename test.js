@@ -6987,3 +6987,36 @@ Promise.all([watchModeTest, watchModeErrorPathTest, watchModeEsmSchemaTest, load
   assert.deepStrictEqual(values(example), values(generateExample(plain)));
   assert.ok(!generateExample(plain).includes('pattern:'));
 }
+
+
+// Issue #340: an unconditional required rule cannot also define a default.
+{
+  const conflict = { PORT: { type: 'port', required: true, default: 3000 } };
+  const message = 'PORT: "required" and "default" cannot be used together (remove one of the two options)';
+
+  for (const validate of [
+    schema => validateSchema(schema),
+    schema => validateEnv(schema, { PORT: '3000' }),
+  ]) {
+    assert.throws(
+      () => validate(conflict),
+      err => err instanceof EnvSaafError && err.errors.includes(message),
+    );
+  }
+
+  assert.throws(
+    () => validateSchema({
+      DB: { prefix: 'DB_', schema: { PORT: { type: 'port', required: true, default: 3000 } } },
+    }),
+    err => err instanceof EnvSaafError
+      && err.errors.includes('DB_PORT: "required" and "default" cannot be used together (remove one of the two options)'),
+  );
+
+  assert.doesNotThrow(() => validateSchema({ PORT: { type: 'port', required: true } }));
+  assert.doesNotThrow(() => validateSchema({ PORT: { type: 'port', default: 3000 } }));
+  assert.throws(
+    () => validateEnv({ PORT: { type: 'port', required: true } }, {}),
+    err => err instanceof EnvSaafError && err.errors[0] === 'PORT: missing required variable',
+  );
+  assert.strictEqual(validateEnv({ PORT: { type: 'port', default: 3000 } }, {}).PORT, 3000);
+}
