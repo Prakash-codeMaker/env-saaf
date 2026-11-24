@@ -1,0 +1,36 @@
+name: Validate prepared contribution branches
+
+on:
+  push:
+    branches:
+      - ci-validation-env-saaf-20261124
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: npm test — \${{ matrix.branch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch:
+          - fix/issue-341-duration-bounds-message-rebased
+          - fix/issue-340-required-default-conflict-rebased
+          - fix/issue-338-report-missing-env-validation-rebased
+          - test/issue-368-package-smoke-rebased
+          - test/issue-366-scan-code-fuzz-rebased
+    steps:
+      - name: Check out contribution branch
+        uses: actions/checkout@v4
+        with:
+          ref: \${{ matrix.branch }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install test dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+      - name: Run complete repository test suite
+        run: npm test
