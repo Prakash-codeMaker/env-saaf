@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: `check --schema` reports when no values file is available instead of silently skipping value validation; `--json` includes `valuesFileFound` while the exit status remains based on actual findings (fixes #338).
+
 - Docs: document CLI exit codes and JSON results for `check`, `scan`, `example` and `init` (fixes #360).
 
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
