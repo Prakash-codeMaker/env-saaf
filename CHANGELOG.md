@@ -134,6 +134,8 @@
 - Fixed: `generateExample` adjusts numeric placeholders to `min`/`max`, respecting integer, port and duration constraints, so generated values round-trip through their own schema (fixes #274).
 - Fixed: `generateExample` adjusts built-in string placeholders to feasible `minLength`/`maxLength` bounds without losing their type's format (fixes #275).
 
+- Fixed: `duration` min/max validation errors now show explicit units: numeric bounds are rendered as milliseconds (e.g. `1000ms`), while string duration bounds retain their readable form; `number` and `int` diagnostics are unchanged (fixes #341).
+
 ## 1.5.0 — 2026-11-20
 
 - Added: `host` type — validates a hostname or an IPv4/IPv6 address (`db.internal`, `localhost`, `10.0.0.5`, `::1`) and rejects values with a scheme, path or port; `minLength`/`maxLength`/`pattern` work on it, and `generateExample` suggests `localhost` (fixes #44)
