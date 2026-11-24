@@ -37,6 +37,8 @@ npm test        # runs the full test file, no install step needed
 
 Releases are handled by the maintainer, so please do not bump `version` in `package.json` in your PR — just add a line for your change under `## Unreleased` in `CHANGELOG.md`.
 
+Before publishing, run `npm test`. The package smoke test runs `npm pack`, installs that local tarball into separate CommonJS and ESM scratch projects, exercises the installed CLI, and type-checks an installed-package consumer without publishing anything.
+
 ## Reporting bugs and asking for features
 
 Use the issue templates. A good bug report includes: what you expected, what actually happened, a tiny code snippet that reproduces it, and your Node version (`node -v`).
