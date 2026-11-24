@@ -1,6 +1,6 @@
 {
   "author": "Abhijeet Kumar (abhi478jeetur-rgb)",
-  "description": "Zero-dependency env validator for Node.js \u2014 fail fast with clear errors, typed values (string/number/boolean/url/port), no more 'false is truthy' or 'PORT + 1 = 30001' bugs.",
+  "description": "Zero-dependency env validator for Node.js — fail fast with clear errors, typed values (string/number/boolean/url/port), no more 'false is truthy' or 'PORT + 1 = 30001' bugs.",
   "engines": {
     "node": ">=16"
   },
@@ -16,7 +16,7 @@
   "main": "index.js",
   "name": "env-saaf",
   "scripts": {
-    "test": "node test.js && node test-cli.js && tsc -p tsconfig.json"
+    "test": "node test.js && node test-cli.js && tsc -p tsconfig.json && node test-packaging.js"
   },
   "devDependencies": {
     "typescript": "^5.9.0"
