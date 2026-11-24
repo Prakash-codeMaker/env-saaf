@@ -114,7 +114,7 @@ try {
     });
     const parsed = JSON.parse(run(['check', dir, '--schema', 'env.schema.js', '--json'], dir).stdout);
     assert.deepStrictEqual(Object.keys(parsed).sort(), [
-      'envExtra', 'envMissing', 'extra', 'invalid', 'missing', 'ok', 'unused',
+      'envExtra', 'envMissing', 'extra', 'invalid', 'missing', 'ok', 'unused', 'valuesFileFound',
     ]);
     assert.strictEqual(parsed.ok, false);
     assert.deepStrictEqual(parsed.missing, ['UNDOCUMENTED']);
@@ -142,6 +142,34 @@ try {
     // Without a template there is nothing to compare: no unused field at all.
     const dir = mkProject({ 'src/app.js': 'console.log(process.env.ONLY);\n' });
     assert.deepStrictEqual(JSON.parse(run(['scan', dir, '--json'], dir).stdout), { ok: true, vars: ['ONLY'] });
+  }
+
+  // --- issue #338: schema checks say when no values file was available ---
+  {
+    const dir = mkProject({
+      'src/app.js': SRC_WITH_USAGE,
+      '.env.example': EXAMPLE_BOTH,
+      'env.schema.js': SCHEMA,
+    });
+
+    const plain = run(['check', dir, '--schema', 'env.schema.js'], dir);
+    assert.strictEqual(plain.status, 0, `${plain.stdout}${plain.stderr}`);
+    assert.match(plain.stdout, /no \.env file found — schema values were not validated/i);
+
+    const json = run(['check', dir, '--schema', 'env.schema.js', '--json'], dir);
+    assert.strictEqual(json.status, 0, `${json.stdout}${json.stderr}`);
+    const parsed = JSON.parse(json.stdout);
+    assert.strictEqual(parsed.ok, true);
+    assert.strictEqual(parsed.valuesFileFound, false);
+    assert.deepStrictEqual(parsed.invalid, []);
+
+    fs.writeFileSync(path.join(dir, '.env'), 'PORT=3000\\nDATABASE_URL=x\\n');
+    const withValues = run(['check', dir, '--schema', 'env.schema.js', '--json'], dir);
+    assert.strictEqual(withValues.status, 0, `${withValues.stdout}${withValues.stderr}`);
+    const checked = JSON.parse(withValues.stdout);
+    assert.strictEqual(checked.ok, true);
+    assert.strictEqual(checked.valuesFileFound, true);
+    assert.deepStrictEqual(checked.invalid, []);
   }
 
   // --- check --schema: an invalid value in the real .env fails the check ----
