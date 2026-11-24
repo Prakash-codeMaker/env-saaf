@@ -69,7 +69,7 @@ try {
     "const pkg = require('env-saaf');",
     "assert.deepStrictEqual(Object.keys(pkg).sort(), " + JSON.stringify(EXPECTED_EXPORTS) + ");",
     "assert.strictEqual(pkg.validateEnv({ PORT: { type: 'port', required: true } }, { PORT: '3000' }).PORT, 3000);",
-    "assert.deepStrictEqual(pkg.parseEnvFile('PORT=3000\\\\n'), { PORT: '3000' });",
+    "assert.deepStrictEqual(pkg.parseEnvFile('PORT=3000\\n'), { PORT: '3000' });",
     "",
   ].join('\n'));
   run(process.execPath, ['consumer.cjs'], cjsProject);
@@ -80,7 +80,7 @@ try {
     "import pkg, { validateEnv, parseEnvFile } from 'env-saaf';",
     "assert.deepStrictEqual(Object.keys(pkg).sort(), " + JSON.stringify(EXPECTED_EXPORTS) + ");",
     "assert.strictEqual(validateEnv({ PORT: { type: 'port', required: true } }, { PORT: '3000' }).PORT, 3000);",
-    "assert.deepStrictEqual(parseEnvFile('PORT=3000\\\\n'), { PORT: '3000' });",
+    "assert.deepStrictEqual(parseEnvFile('PORT=3000\\n'), { PORT: '3000' });",
     "",
   ].join('\n'));
   run(process.execPath, ['consumer.mjs'], esmProject);
