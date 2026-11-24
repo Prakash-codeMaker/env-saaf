@@ -597,7 +597,7 @@ async function runCheck() {
       usedNotDocumented.forEach(k => console.log(`MISSING in ${fileOpt}: ${k} (used in code)`));
       documentedNotUsed.forEach(k => console.log(`UNUSED: ${k} (in ${fileOpt}, never used in code)`));
       envExtra.forEach(k => console.log(`EXTRA in .env: ${k} (not in ${fileOpt})`));
-      envMissing.forEach(k => console.log(`MISSING in .env: ${k} (in .env, not set locally)`));
+      envMissing.forEach(k => console.log(`MISSING in .env: ${k} (in ${fileOpt}, not set locally)`));
       invalid.forEach(e => console.log(`INVALID: ${e}`));
       if (!usedNotDocumented.length && !documentedNotUsed.length && !envExtra.length && !envMissing.length && !invalid.length) {
         console.log(`env-saaf: all clean — code and ${fileOpt} match.`);
