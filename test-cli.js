@@ -110,7 +110,7 @@ try {
     assert.strictEqual(parsed.valuesFileFound, false);
     assert.deepStrictEqual(parsed.invalid, []);
 
-    fs.writeFileSync(path.join(dir, '.env'), 'PORT=3000\\nDATABASE_URL=x\\n');
+    fs.writeFileSync(path.join(dir, '.env'), 'PORT=3000\nDATABASE_URL=x\n');
     const withValues = run(['check', dir, '--schema', 'env.schema.js', '--json'], dir);
     assert.strictEqual(withValues.status, 0, `${withValues.stdout}${withValues.stderr}`);
     const checked = JSON.parse(withValues.stdout);
