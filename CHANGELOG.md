@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed: `validateSchema` rejects `required: true` together with `default`, including inside grouped schemas, so the default cannot silently make the required check unreachable (fixes #340).
 - Docs: document CLI exit codes and JSON results for `check`, `scan`, `example` and `init` (fixes #360).
 
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
