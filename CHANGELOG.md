@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-- Fixed: `validateSchema` rejects `required: true` together with `default`, including inside grouped schemas, so the default cannot silently make the required check unreachable (fixes #340).
-
 - Fixed: `parseEnvFile` now expands `\n` and `\r` escape sequences in double-quoted values (dotenv parity), so a PEM key written as `"-----BEGIN-----\n..."` loads with real newlines; `\\` stays a single backslash and single-quoted values are unchanged (fixes #333).
 
 - Added: duration rules accept human duration strings for inclusive `min` / `max` bounds, including compound durations. Invalid or reversed bounds fail schema validation; numeric bounds keep their existing behavior. Generated examples and JSON Schema use the parsed bounds (fixes #322).
@@ -133,6 +131,8 @@
 
 - Fixed: `generateExample` adjusts numeric placeholders to `min`/`max`, respecting integer, port and duration constraints, so generated values round-trip through their own schema (fixes #274).
 - Fixed: `generateExample` adjusts built-in string placeholders to feasible `minLength`/`maxLength` bounds without losing their type's format (fixes #275).
+
+- Fixed: `validateSchema` rejects `required: true` together with `default`, including inside grouped schemas, so the default cannot silently make the required check unreachable (fixes #340).
 
 ## 1.5.0 — 2026-11-20
 
