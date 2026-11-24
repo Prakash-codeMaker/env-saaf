@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Tests: add 300 deterministic generated `scanCode` cases spanning real reads, comments, strings, template text, regex decoys, duplicate occurrences and output ordering (fixes #366).
+
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
 
 - Fixed: `parseEnvFile` now expands `\n` and `\r` escape sequences in double-quoted values (dotenv parity), so a PEM key written as `"-----BEGIN-----\n..."` loads with real newlines; `\\` stays a single backslash and single-quoted values are unchanged (fixes #333).
