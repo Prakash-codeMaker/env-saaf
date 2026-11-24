@@ -2,8 +2,6 @@
 
 ## Unreleased
 
-- Fixed: `check --schema` reports when no values file is available instead of silently skipping value validation; `--json` includes `valuesFileFound` while the exit status remains based on actual findings (fixes #338).
-
 - Fixed: `scanDir` skips `dist`, `build`, `coverage`, `.next`, `out` and `target` (and `node_modules`/`.git*` as before), so a stale build output no longer makes an unused key look used (fixes #334).
 
 - Fixed: `parseEnvFile` now expands `\n` and `\r` escape sequences in double-quoted values (dotenv parity), so a PEM key written as `"-----BEGIN-----\n..."` loads with real newlines; `\\` stays a single backslash and single-quoted values are unchanged (fixes #333).
@@ -135,6 +133,8 @@
 
 - Fixed: `generateExample` adjusts numeric placeholders to `min`/`max`, respecting integer, port and duration constraints, so generated values round-trip through their own schema (fixes #274).
 - Fixed: `generateExample` adjusts built-in string placeholders to feasible `minLength`/`maxLength` bounds without losing their type's format (fixes #275).
+
+- Fixed: `check --schema` reports when no values file is available instead of silently skipping value validation; `--json` includes `valuesFileFound` while the exit status remains based on actual findings (fixes #338).
 
 ## 1.5.0 — 2026-11-20
 
