@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: `duration` min/max validation errors now state milliseconds for numeric bounds and preserve duration strings for string bounds; `number` and `int` diagnostics are unchanged (fixes #341).
+
 - Fixed: `parseEnvFile` now expands `\n` and `\r` escape sequences in double-quoted values (dotenv parity), so a PEM key written as `"-----BEGIN-----\n..."` loads with real newlines; `\\` stays a single backslash and single-quoted values are unchanged (fixes #333).
 
 - Added: duration rules accept human duration strings for inclusive `min` / `max` bounds, including compound durations. Invalid or reversed bounds fail schema validation; numeric bounds keep their existing behavior. Generated examples and JSON Schema use the parsed bounds (fixes #322).
