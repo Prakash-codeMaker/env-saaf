@@ -2126,7 +2126,13 @@ assert.deepStrictEqual(
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', default: 5000 } }, {}).TIMEOUT, 5000);
   // min/max work on the millisecond result like on any other number.
   assert.strictEqual(validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '30s' }).TIMEOUT, 30000);
-  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '500ms' }), /expected a number at least 1000/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: 1000 } }, { TIMEOUT: '500ms' }), /expected a duration at least 1000ms/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', max: 1000 } }, { TIMEOUT: '2s' }), /expected a duration at most 1000ms/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: 1000, max: 2000 } }, { TIMEOUT: '500ms' }), /expected a duration between 1000ms and 2000ms/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: '1s' } }, { TIMEOUT: '500ms' }), /expected a duration at least 1s/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'duration', min: '1s', max: '2s' } }, { TIMEOUT: '500ms' }), /expected a duration between 1s and 2s/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'number', min: 1000, max: 2000 } }, { TIMEOUT: '500' }), /expected a number 1000–2000/);
+  assert.throws(() => validateEnv({ TIMEOUT: { type: 'int', min: 1 } }, { TIMEOUT: '0' }), /expected a number at least 1/);
   // Unknown units, negatives and malformed values are rejected, naming the key.
   for (const bad of ['15x', '15min', '15sec', '-5m', '-1', 'm', '1.2.3h', '1e3s']) {
     assert.throws(() => validateEnv(schema, { TIMEOUT: bad }), /expected a duration/);
