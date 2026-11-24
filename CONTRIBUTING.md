@@ -15,7 +15,8 @@ Thanks for stopping by! env-saaf is a small, zero-dependency package, and contri
 ```bash
 git clone https://github.com/abhi478jeetur-rgb/env-saaf.git
 cd env-saaf
-npm test        # runs the full test file, no install step needed
+npm install     # installs TypeScript, the only development dependency
+npm test        # runs the full test suite, including the packed-package smoke test
 ```
 
 ## Picking something to work on
@@ -36,6 +37,9 @@ npm test        # runs the full test file, no install step needed
 ## Releases
 
 Releases are handled by the maintainer, so please do not bump `version` in `package.json` in your PR — just add a line for your change under `## Unreleased` in `CHANGELOG.md`.
+
+
+The package smoke test uses `npm pack` and installs that local tarball into clean CommonJS and ESM scratch projects. It verifies the published file list, public API from both module systems, installed CLI, and installed TypeScript declarations. It does not publish to npm or need a registry dependency because the tarball has no runtime dependencies.
 
 ## Reporting bugs and asking for features
 
