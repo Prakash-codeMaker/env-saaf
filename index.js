@@ -1031,9 +1031,11 @@ function validateEnvCore(schema, env, options) {
         const lo = rule.min !== undefined ? numericBound(key, rule, rule.min) : -Infinity;
         const hi = rule.max !== undefined ? numericBound(key, rule, rule.max) : Infinity;
         if (val < lo || val > hi) {
-          const range = rule.min !== undefined && rule.max !== undefined ? `${rule.min}–${rule.max}`
-            : rule.min !== undefined ? `at least ${rule.min}` : `at most ${rule.max}`;
-          errors.push(`${key}: expected a number ${range}, got "${shown}"`);
+          const boundText = value => type === 'duration' && typeof value === 'number' ? `${value}ms` : String(value);
+          const range = rule.min !== undefined && rule.max !== undefined
+            ? type === 'duration' ? `between ${boundText(rule.min)} and ${boundText(rule.max)}` : `${rule.min}–${rule.max}`
+            : rule.min !== undefined ? `at least ${boundText(rule.min)}` : `at most ${boundText(rule.max)}`;
+          errors.push(`${key}: expected a ${type === 'duration' ? 'duration' : 'number'} ${range}, got "${shown}"`);
           continue;
         }
       }
