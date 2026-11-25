@@ -40,7 +40,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { types: { isModuleNamespaceObject } } = require('node:util');
-const { scanCode, scanCodeLocations, scanDir, scanDirLocations, parseEnvFile, diffEnv, validateEnv, EnvSaafError, generateExample, toJsonSchema } = require('./index');
+const { scanCode, scanCodeLocations, scanDir, scanDirLocations, parseEnvFile, diffEnv, validateEnv, validateSchema, EnvSaafError, generateExample, toJsonSchema } = require('./index');
 
 const argv = process.argv.slice(2);
 // --version / -v is global: report the installed version wherever it appears, before anything else runs
@@ -507,6 +507,19 @@ async function loadSchemaFile() {
   return schema;
 }
 
+function flattenSchemaKeys(schema, prefix = '') {
+  const keys = [];
+  for (const [name, rule] of Object.entries(schema)) {
+    if (rule && typeof rule === 'object' && !Array.isArray(rule) && rule.schema !== undefined) {
+      // Group keys use the group's env prefix, not the result-object group name.
+      keys.push(...flattenSchemaKeys(rule.schema, prefix + rule.prefix));
+    } else {
+      keys.push(prefix + name);
+    }
+  }
+  return keys;
+}
+
 async function runCheck() {
   // Issue #268: --json-schema prints the --schema file as a draft 2020-12
   // JSON Schema document to stdout instead of running the check. The
@@ -550,6 +563,28 @@ async function runCheck() {
     fatalExit(2);
   }
   const documented = Object.keys(readEnvFile(examplePath));
+  let schema = null;
+  let schemaMissingFromExample = [];
+  let exampleMissingFromSchema = [];
+  if (schemaOpt) {
+    schema = await loadSchemaFile();
+    try {
+      validateSchema(schema);
+    } catch (e) {
+      if (e instanceof EnvSaafError) {
+        const message = `env-saaf: invalid schema ${schemaOpt}: ${e.message}`;
+        if (jsonMode) console.log(JSON.stringify({ ok: false, error: message }));
+        else console.error(message);
+        fatalExit(2);
+      }
+      throw e;
+    }
+    const schemaKeys = flattenSchemaKeys(schema);
+    const schemaKeySet = new Set(schemaKeys);
+    const documentedSet = new Set(documented);
+    schemaMissingFromExample = schemaKeys.filter(key => !documentedSet.has(key)).sort();
+    exampleMissingFromSchema = documented.filter(key => !schemaKeySet.has(key));
+  }
   const used = scanDir(dir);
   const { usedNotDocumented, documentedNotUsed } = diffEnv(used, documented);
   // The real .env is not committed, so only compare keys when it is actually present
@@ -572,7 +607,6 @@ async function runCheck() {
   // errors already name the key) and fail the check like a missing key.
   let invalid = [];
   if (schemaOpt) {
-    const schema = await loadSchemaFile();
     const targetName = fileExplicit ? fileOpt : (envFileFound ? '.env' : null);
     if (targetName) {
       const values = readEnvFile(path.join(dir, targetName));
@@ -592,10 +626,12 @@ async function runCheck() {
   // fails the check exactly as before (#113 is unchanged for a project that
   // already reads at least one variable).
   const scaffoldAhead = used.length === 0 && documentedNotUsed.length > 0
-    && usedNotDocumented.length === 0 && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0;
+    && usedNotDocumented.length === 0 && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0
+    && schemaMissingFromExample.length === 0 && exampleMissingFromSchema.length === 0;
   const scaffoldNote = `no process.env usage found in code yet — ${documentedNotUsed.length} ${documentedNotUsed.length === 1 ? 'key' : 'keys'} in ${fileOpt} ${documentedNotUsed.length === 1 ? 'is' : 'are'} not used by any code yet`;
   const ok = scaffoldAhead || (usedNotDocumented.length === 0 && documentedNotUsed.length === 0
-    && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0);
+    && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0
+    && schemaMissingFromExample.length === 0 && exampleMissingFromSchema.length === 0);
   const skippedValues = schemaOpt && !fileExplicit && !envFileFound;
   if (skippedValues && !jsonMode) {
     console.log('env-saaf: no .env file found — values were not validated.');
@@ -613,6 +649,10 @@ async function runCheck() {
       envExtra,
       envMissing,
     };
+    if (schemaOpt) {
+      result.schemaMissingFromExample = schemaMissingFromExample;
+      result.exampleMissingFromSchema = exampleMissingFromSchema;
+    }
     if (skippedValues) result.envFileFound = false;
     if (scaffoldAhead) result.note = scaffoldNote;
     console.log(JSON.stringify(result));
@@ -621,10 +661,13 @@ async function runCheck() {
   } else {
     usedNotDocumented.forEach(k => console.log(`MISSING in ${fileOpt}: ${k} (used in code)`));
     documentedNotUsed.forEach(k => console.log(`UNUSED: ${k} (in ${fileOpt}, never used in code)`));
+    schemaMissingFromExample.forEach(k => console.log(`NOT DOCUMENTED: ${k} (in schema, missing from ${fileOpt})`));
+    exampleMissingFromSchema.forEach(k => console.log(`NOT IN SCHEMA: ${k} (in ${fileOpt}, not declared in schema)`));
     envExtra.forEach(k => console.log(`EXTRA in .env: ${k} (not in ${fileOpt})`));
     envMissing.forEach(k => console.log(`MISSING in .env: ${k} (in ${fileOpt}, not set locally)`));
     invalid.forEach(e => console.log(`INVALID: ${e}`));
-    if (!usedNotDocumented.length && !documentedNotUsed.length && !envExtra.length && !envMissing.length && !invalid.length) {
+    if (!usedNotDocumented.length && !documentedNotUsed.length && !envExtra.length && !envMissing.length && !invalid.length
+      && !schemaMissingFromExample.length && !exampleMissingFromSchema.length) {
       console.log(`env-saaf: all clean — code and ${fileOpt} match.`);
     }
   }
