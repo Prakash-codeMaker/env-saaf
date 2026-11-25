@@ -24,7 +24,7 @@
   "main": "index.js",
   "name": "env-saaf",
   "scripts": {
-    "test": "node test.js && node test-cli.js && node test-scan-fuzz.js && node test-pack.js && node test-exports.js && tsc -p tsconfig.json"
+    "test": "node test.js && node test-cli.js && node test-scan-fuzz.js && node test-validate-fuzz.js && node test-pack.js && node test-exports.js && tsc -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^5.9.0"
