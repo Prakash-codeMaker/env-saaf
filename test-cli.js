@@ -177,14 +177,14 @@ try {
   {
     const dir = mkProject({
       'package.json': JSON.stringify({ name: 'configured-project', 'env-saaf': { directory: 'app', file: '.env.sample', schema: 'env.schema.js' } }),
-      'app/src/app.js': 'void process.env.PORT;\\n',
-      'app/.env.sample': 'PORT=3000\\n',
-      'app/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\\n",
-      'app/.env.alt': 'PORT=not-a-port\\nEXTRA=value\\n',
-      'app/env.schema-alt.js': "module.exports = { PORT: { type: 'string', required: true } };\\n",
-      'other/src/app.js': 'void process.env.PORT;\\n',
-      'other/.env.sample': 'PORT=3000\\n',
-      'other/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\\n",
+      'app/src/app.js': 'void process.env.PORT;\n',
+      'app/.env.sample': 'PORT=3000\n',
+      'app/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\n",
+      'app/.env.alt': 'PORT=not-a-port\nEXTRA=value\n',
+      'app/env.schema-alt.js': "module.exports = { PORT: { type: 'string', required: true } };\n",
+      'other/src/app.js': 'void process.env.PORT;\n',
+      'other/.env.sample': 'PORT=3000\n',
+      'other/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\n",
     });
     // With no positional directory or flags, all three package defaults apply.
     const defaults = run(['check'], dir);
@@ -206,8 +206,8 @@ try {
   {
     const dir = mkProject({
       'package.json': JSON.stringify({ 'env-saaf': { schema: 'env.schema.js', typo: true } }),
-      '.env.example': 'PORT=\\n',
-      'src/app.js': 'void process.env.PORT;\\n',
+      '.env.example': 'PORT=\n',
+      'src/app.js': 'void process.env.PORT;\n',
     });
     const result = run(['check', '--json'], dir);
     assert.strictEqual(result.status, 2);
