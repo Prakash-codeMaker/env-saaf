@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: `check` flags likely real credentials in `.env.example` (provider keys, AWS access-key IDs, database URLs with passwords, 40-character hex tokens and long high-entropy values); findings identify the key and never disclose the value in text or `--json` output, while common placeholders are ignored (fixes #416).
+
 - Added: seeded property-based tests for `validateEnv` (`test-validate-fuzz.js`,
   part of `npm test`) covering all 18 scalar types and `array`, checking
   coercion idempotence, `.env.example` round-trips, inclusive `min`/`max`
