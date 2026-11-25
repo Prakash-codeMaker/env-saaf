@@ -150,6 +150,36 @@ const env = validateEnv({
 - Inside grouped schemas, `conflictsWith` uses full flattened env names (`DB_HOST`, `DATABASE_URL`).
 - `validateSchema` rejects a `conflictsWith` that names an undeclared key, the key itself, or an empty/non-string entry.
 
+### Cross-field validation with schema-level `rules`
+
+Per-key `validate(value, env)` callbacks are useful for checks tied to one key. For relationships between multiple settings, pass a top-level `rules` hook to `validateEnv`, `loadEnv`, or `loadEnvAsync`:
+
+```js
+const { validateEnv } = require('env-saaf');
+
+const env = validateEnv({
+  CACHE_TTL:       { type: 'duration', required: true },
+  SESSION_TTL:     { type: 'duration', required: true },
+  WORKERS:         { type: 'int', default: 2 },
+  QUEUE_DEPTH:     { type: 'int', default: 10 },
+  MAX_CONNECTIONS: { type: 'int', default: 100 },
+}, process.env, {
+  rules: [
+    values => values.CACHE_TTL < values.SESSION_TTL
+      ? undefined
+      : 'CACHE_TTL must be smaller than SESSION_TTL',
+    values => values.WORKERS * values.QUEUE_DEPTH <= values.MAX_CONNECTIONS
+      ? undefined
+      : 'WORKERS * QUEUE_DEPTH must not exceed MAX_CONNECTIONS',
+  ],
+});
+```
+
+- `rules` accepts one function or an array of functions. Each receives the fully coerced result, including defaults and nested groups, rather than raw strings. Optional keys that were not set remain omitted.
+- A hook returns nothing (`undefined` / `null`) when the values pass, or one error string / an array of error strings when they do not. Messages join the normal `EnvSaafError.errors` and `details` lists; with `{ throwOnError: false }`, they appear in the returned `errors` / `details` instead.
+- Hooks run only after all key-level and built-in cross-key checks succeed. When those checks already found an error, hooks are skipped rather than being given a partial result. A hook that throws propagates its exception as a programming error.
+- `loadEnv` and `loadEnvAsync` forward `rules` after loading and coercing the file values. The hook sees the full validated object, including values from `sensitive: true` fields, so do not copy secrets into returned messages.
+
 ### Non-throwing mode — collect errors instead of throwing
 
 A health check, a CLI, or a server that wants to boot in a degraded mode cannot use an API that throws on the first bad value. Pass `{ throwOnError: false }` and `validateEnv` returns `{ env, errors, details }` instead: `env` holds every value that validated, `errors` is the same list `EnvSaafError` would have carried, and `details` is the same list split into `{ key, message }` objects (see [Structured error details](#structured-error-details)).
