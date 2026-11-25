@@ -173,6 +173,58 @@ try {
     assert.ok(Array.isArray(parsed.invalid) && parsed.invalid.length === 1 && /PORT/.test(parsed.invalid[0]));
   }
 
+  // --- issue #352: --values selects an independent file for schema validation ---
+  {
+    const dir = mkProject({
+      'src/app.js': SRC_WITH_USAGE,
+      '.env.sample': EXAMPLE_BOTH,
+      '.env.production': 'PORT=3000\nDATABASE_URL=x\n',
+      'env.schema.js': SCHEMA,
+    });
+    // --values is independent of --file: the latter remains the comparison template.
+    const valid = run(['check', dir, '--file', '.env.sample', '--schema', 'env.schema.js', '--values', '.env.production'], dir);
+    assert.strictEqual(valid.status, 0, `${valid.stdout}${valid.stderr}`);
+    assert.match(valid.stdout, /validating schema values from \.env\.production/);
+    assert.match(valid.stdout, /all clean/);
+
+    fs.writeFileSync(path.join(dir, '.env.production'), 'PORT=not-a-port\nDATABASE_URL=x\n');
+    const invalid = run(['check', dir, '--file', '.env.sample', '--schema', 'env.schema.js', '--values=.env.production'], dir);
+    assert.strictEqual(invalid.status, 1);
+    assert.match(invalid.stdout, /INVALID: PORT/);
+    assert.match(invalid.stdout, /validating schema values from \.env\.production/);
+
+    const json = run(['check', dir, '--schema', 'env.schema.js', '--values', '.env.production', '--json'], dir);
+    assert.strictEqual(json.status, 1);
+    const parsed = JSON.parse(json.stdout);
+    assert.strictEqual(parsed.valuesFile, '.env.production');
+    assert.strictEqual(parsed.ok, false);
+    assert.strictEqual(parsed.invalid.length, 1);
+    assert.match(parsed.invalid[0], /PORT/);
+
+    const missing = run(['check', dir, '--schema', 'env.schema.js', '--values', '.env.missing'], dir);
+    assert.strictEqual(missing.status, 2);
+    assert.match(missing.stderr, /values file \.env\.missing was not found/);
+    assert.ok(!/at Object\\.|at Module\\./.test(missing.stderr), 'missing values file has no raw stack trace');
+
+    const missingJson = run(['check', dir, '--schema', 'env.schema.js', '--values', '.env.missing', '--json'], dir);
+    assert.strictEqual(missingJson.status, 2);
+    const missingParsed = JSON.parse(missingJson.stdout);
+    assert.strictEqual(missingParsed.valuesFile, '.env.missing');
+    assert.match(missingParsed.error, /was not found/);
+
+    const withoutSchema = run(['check', dir, '--values', '.env.production'], dir);
+    assert.strictEqual(withoutSchema.status, 2);
+    assert.match(withoutSchema.stderr, /--values needs --schema/);
+
+    const noValue = run(['check', dir, '--schema', 'env.schema.js', '--values='], dir);
+    assert.strictEqual(noValue.status, 2);
+    assert.match(noValue.stderr, /--values needs a value/);
+
+    const directory = run(['check', dir, '--schema', 'env.schema.js', '--values', 'src'], dir);
+    assert.strictEqual(directory.status, 2);
+    assert.match(directory.stderr, /values file src is not a regular file/);
+  }
+
   // --- check --json-schema: stdout is the draft 2020-12 JSON Schema for the --schema file (issue #268)
   {
     const { toJsonSchema } = require('./index');
