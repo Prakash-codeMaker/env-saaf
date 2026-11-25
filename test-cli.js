@@ -204,7 +204,7 @@ try {
     const missing = run(['check', dir, '--schema', 'env.schema.js', '--values', '.env.missing'], dir);
     assert.strictEqual(missing.status, 2);
     assert.match(missing.stderr, /values file \.env\.missing was not found/);
-    assert.ok(!/at Object\\.|at Module\\./.test(missing.stderr), 'missing values file has no raw stack trace');
+    assert.ok(!/at Object\.|at Module\./.test(missing.stderr), 'missing values file has no raw stack trace');
 
     const missingJson = run(['check', dir, '--schema', 'env.schema.js', '--values', '.env.missing', '--json'], dir);
     assert.strictEqual(missingJson.status, 2);
