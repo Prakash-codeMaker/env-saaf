@@ -8457,6 +8457,118 @@ const interpolationOperatorsTest = (async () => {
   }
 })();
 
-Promise.all([watchModeTest, watchModeErrorPathTest, watchModeEsmSchemaTest, loadEnvAsyncTest, formatErrorThrowingHookTest, loadEnvSourceErrorsTest, conflictsWithTest, interpolationOperatorsTest])
+
+const schemaRulesTest = (async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { loadEnv, loadEnvAsync, validateEnv } = require('./index');
+
+  const schema = {
+    CACHE_TTL: { type: 'duration', required: true },
+    SESSION_TTL: { type: 'duration', required: true },
+    WORKERS: { type: 'int', default: 2 },
+    QUEUE_DEPTH: { type: 'int', default: 5 },
+    MAX_CONNECTIONS: { type: 'int', default: 20 },
+  };
+
+  // A hook sees typed values and defaults; the no-error path leaves the result unchanged.
+  const valid = validateEnv(schema, { CACHE_TTL: '30s', SESSION_TTL: '2m' }, {
+    rules: values => {
+      assert.strictEqual(values.CACHE_TTL, 30000);
+      assert.strictEqual(values.SESSION_TTL, 120000);
+      assert.strictEqual(values.WORKERS, 2);
+      assert.ok(Object.isFrozen(values));
+      return values.CACHE_TTL < values.SESSION_TTL
+        ? undefined
+        : 'CACHE_TTL must be smaller than SESSION_TTL';
+    },
+  });
+  assert.deepStrictEqual(valid, {
+    CACHE_TTL: 30000, SESSION_TTL: 120000, WORKERS: 2, QUEUE_DEPTH: 5, MAX_CONNECTIONS: 20,
+  });
+
+  // A single returned string joins EnvSaafError.errors and global error details.
+  assert.throws(
+    () => validateEnv(schema, { CACHE_TTL: '2m', SESSION_TTL: '1m' }, {
+      rules: values => values.CACHE_TTL < values.SESSION_TTL
+        ? undefined
+        : 'CACHE_TTL must be smaller than SESSION_TTL',
+    }),
+    error => error instanceof EnvSaafError
+      && error.errors[0] === 'CACHE_TTL must be smaller than SESSION_TTL'
+      && error.details[0].key === '',
+  );
+
+  // Multiple hooks may each return a string or an array; non-throwing mode collects all.
+  const collected = validateEnv(schema, {
+    CACHE_TTL: '2m', SESSION_TTL: '1m', WORKERS: '5', QUEUE_DEPTH: '5', MAX_CONNECTIONS: '10',
+  }, {
+    throwOnError: false,
+    rules: [
+      values => values.CACHE_TTL < values.SESSION_TTL
+        ? undefined
+        : 'CACHE_TTL must be smaller than SESSION_TTL',
+      values => values.WORKERS * values.QUEUE_DEPTH <= values.MAX_CONNECTIONS
+        ? undefined
+        : ['WORKERS * QUEUE_DEPTH must not exceed MAX_CONNECTIONS', 'Review worker capacity'],
+    ],
+  });
+  assert.deepStrictEqual(collected.errors, [
+    'CACHE_TTL must be smaller than SESSION_TTL',
+    'WORKERS * QUEUE_DEPTH must not exceed MAX_CONNECTIONS',
+    'Review worker capacity',
+  ]);
+  assert.deepStrictEqual(collected.details.map(detail => detail.key), ['', '', '']);
+
+  // Grouped schemas reach hooks in their normal nested result shape.
+  const grouped = validateEnv({
+    DB: { prefix: 'DB_', schema: { PORT: { type: 'port', required: true } } },
+  }, { DB_PORT: '5432' }, {
+    rules: values => values.DB.PORT === 5432 ? undefined : 'DB.PORT must be 5432',
+  });
+  assert.deepStrictEqual(grouped, { DB: { PORT: 5432 } });
+
+  // Hooks do not run when a key-level check failed, because the result is partial.
+  let called = false;
+  const partial = validateEnv(
+    { PORT: { type: 'port', required: true } },
+    { PORT: 'not-a-port' },
+    { throwOnError: false, rules: () => { called = true; return 'must not run'; } },
+  );
+  assert.strictEqual(called, false);
+  assert.strictEqual(partial.errors.length, 1);
+  assert.match(partial.errors[0], /expected a port/);
+
+  // Both file loaders forward the same cross-field hook.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-saaf-346-'));
+  const file = path.join(dir, 'values.env');
+  const fileSchema = {
+    CACHE_TTL: { type: 'duration', required: true },
+    SESSION_TTL: { type: 'duration', required: true },
+  };
+  const crossField = values => values.CACHE_TTL < values.SESSION_TTL
+    ? undefined
+    : 'CACHE_TTL must be smaller than SESSION_TTL';
+  try {
+    fs.writeFileSync(file, 'CACHE_TTL=2m\\nSESSION_TTL=1m\\n');
+    const isCrossFieldError = error => error instanceof EnvSaafError
+      && error.errors[0] === 'CACHE_TTL must be smaller than SESSION_TTL'
+      && error.details[0].key === '';
+    assert.throws(
+      () => loadEnv(fileSchema, { path: file, env: {}, rules: crossField }),
+      isCrossFieldError,
+    );
+    await assert.rejects(
+      loadEnvAsync(fileSchema, { path: file, env: {}, rules: crossField }),
+      isCrossFieldError,
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  console.log('schema-level cross-field rules tests passed');
+})();
+
+Promise.all([watchModeTest, watchModeErrorPathTest, watchModeEsmSchemaTest, loadEnvAsyncTest, formatErrorThrowingHookTest, loadEnvSourceErrorsTest, conflictsWithTest, interpolationOperatorsTest, schemaRulesTest])
   .then(() => console.log('env-saaf v1.5.0: all tests passed'))
   .catch((err) => { console.error(err); process.exit(1); });
