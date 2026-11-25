@@ -147,7 +147,10 @@ let dir = positional[0] || process.cwd();
 // error, because a config the user meant to apply must not be skipped.
 const CONFIG_KEYS = ['schema', 'file', 'dir'];
 if (['check', 'scan', 'print', 'example', 'init'].includes(cmd)) {
-  const configDir = positional[0] || process.cwd();
+  let configDir = positional[0] || process.cwd();
+  if (positional[0] && fs.existsSync(configDir) && fs.statSync(configDir).isFile()) {
+    configDir = process.cwd();
+  }
   const pkgPath = path.join(configDir, 'package.json');
   let pkg = null;
   // existsSync first: a missing package.json means "no config", and a
@@ -194,6 +197,10 @@ if (['check', 'scan', 'print', 'example', 'init'].includes(cmd)) {
     if (!fileExplicit && config.file !== undefined) { fileOpt = config.file; fileExplicit = true; }
   }
 }
+// Keep the caller's source-file target for scanning and JSON locations. A file
+// argument still uses the working directory as the project root for .env files.
+const scanTarget = dir;
+
 // Issue #232: with a bare `--from-example`, a second positional names the
 // example file instead of being mistaken for the directory.
 let exampleOpt = null;
@@ -403,13 +410,27 @@ function schemaFromExample(hint, exampleName, entries, scannedKeys = [], groups 
   return `// Starter schema inferred by env-saaf init --from-example from ${exampleName} — review every rule.\n// ${hint}\nmodule.exports = {\n${inferred.join('\n')}\n${scanned}};\n`;
 }
 
-// Issue #133: validate the directory argument before any command uses it.
-// scanDir's readdirSync otherwise throws a raw Node stack trace for a file
-// path or a missing directory. Report a clear message and exit 2 instead.
+// Issue #418: only scan/check accept one readable source file as well as a directory.
+const SCAN_FILE_EXTENSION = /\.(js|cjs|mjs|ts|mts|cts|tsx|jsx|vue|svelte|astro)$/;
 if (cmd === 'scan' || cmd === 'check' || cmd === 'example' || cmd === 'init' || cmd === 'print') {
-  const invalidDir = !fs.existsSync(dir)
+  const exists = fs.existsSync(dir);
+  const stats = exists ? fs.statSync(dir) : null;
+  const isSourceFile = (cmd === 'scan' || cmd === 'check')
+    && stats !== null && stats.isFile() && SCAN_FILE_EXTENSION.test(dir);
+  let invalidDir = !exists
     ? `${dir} does not exist`
-    : !fs.statSync(dir).isDirectory() ? `${dir} is not a directory` : null;
+    : stats.isDirectory() || isSourceFile
+      ? null
+      : stats.isFile() && (cmd === 'scan' || cmd === 'check')
+        ? `${dir} is not a supported code file`
+        : `${dir} is not a directory`;
+  if (!invalidDir && isSourceFile) {
+    try {
+      fs.accessSync(dir, fs.constants.R_OK);
+    } catch {
+      invalidDir = `${dir} is not a readable code file`;
+    }
+  }
   if (invalidDir) {
     const message = `env-saaf: ${invalidDir}`;
     if (jsonMode) {
@@ -419,6 +440,7 @@ if (cmd === 'scan' || cmd === 'check' || cmd === 'example' || cmd === 'init' || 
     }
     process.exit(2);
   }
+  if (isSourceFile) dir = process.cwd();
 }
 
 // Issue #358: the env names a schema declares, groups flattened to DB_HOST.
@@ -586,10 +608,10 @@ function printScanResult(vars, locations) {
 function runScan() {
   // Issue #335: JSON mode reuses scanDirLocations so the CLI does not re-walk.
   if (jsonMode) {
-    const { vars, locations } = scanDirLocations(dir, { exclude: excludeOpts });
+    const { vars, locations } = scanDirLocations(scanTarget, { exclude: excludeOpts });
     return printScanResult(vars, locations);
   }
-  return printScanResult(scanDir(dir, { exclude: excludeOpts }));
+  return printScanResult(scanDir(scanTarget, { exclude: excludeOpts }));
 }
 
 const esmWatchPaths = new Set();
@@ -721,7 +743,7 @@ async function runCheck() {
     fatalExit(2);
   }
   const documented = Object.keys(readEnvFile(examplePath));
-  const used = scanDir(dir, { exclude: excludeOpts });
+  const used = scanDir(scanTarget, { exclude: excludeOpts });
   const { usedNotDocumented, documentedNotUsed } = diffEnv(used, documented);
   // The real .env is not committed, so only compare keys when it is actually present
   const envPath = path.join(dir, '.env');

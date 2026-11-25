@@ -2270,6 +2270,17 @@ function scanExcluder(patterns) {
 }
 
 function listScanFiles(dir, options = {}) {
+  let stat;
+  try {
+    stat = fs.statSync(dir);
+  } catch (error) {
+    if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) return [];
+    throw error;
+  }
+  if (stat.isFile()) {
+    const relative = path.relative(process.cwd(), path.resolve(dir)).split(path.sep).join('/');
+    return SCAN_EXTENSIONS.test(dir) && !scanExcluder(options.exclude)(relative) ? [dir] : [];
+  }
   const files = [];
   const excluded = scanExcluder(options.exclude);
   // A real path is walked once, so a symlinked package is included but a
@@ -2313,15 +2324,21 @@ function scanDir(dir, options = {}) {
 }
 
 /**
- * Issue #335: directory scan with a `locations` map. File paths are relative to
- * `dir` using forward slashes; lines are 1-based. `vars` matches `scanDir`.
+ * Issue #335: scan with a `locations` map. Directory paths are relative to
+ * `dir`; a single-file scan preserves the supplied file path. Lines are 1-based.
  */
 function scanDirLocations(dir, options = {}) {
   const root = path.resolve(dir);
+  let isFile = false;
+  try {
+    isFile = fs.statSync(dir).isFile();
+  } catch (error) {
+    if (!error || (error.code !== 'ENOENT' && error.code !== 'ENOTDIR')) throw error;
+  }
   const files = listScanFiles(dir, options)
     .map((abs) => ({
       abs,
-      rel: path.relative(root, abs).split(path.sep).join('/'),
+      rel: isFile ? dir : path.relative(root, abs).split(path.sep).join('/'),
     }))
     .sort((a, b) => a.rel.localeCompare(b.rel));
   const reads = [];

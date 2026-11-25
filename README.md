@@ -922,6 +922,8 @@ CLI output is plain text by default, including in pipes and CI. For scripts that
 ```bash
 npx env-saaf --version      # print the installed version
 npx env-saaf scan ./src     # every env var your code actually uses
+npx env-saaf scan ./src/server.js  # scan only this supported source file
+npx env-saaf check ./src/server.js # compare it with the project's .env.example
 npx env-saaf scan . --exclude fixtures --exclude 'src/generated/**'  # leave vendored or generated code out
                            # scans .js/.cjs/.mjs/.ts/.mts/.cts/.tsx/.jsx and .vue/.svelte/.astro components
 git show HEAD:src/config.js | npx env-saaf scan --stdin  # scan code piped on standard input
