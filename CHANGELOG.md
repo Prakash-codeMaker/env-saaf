@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: `check` reads optional `directory`, `file`, and `schema` defaults from the current project's `package.json` `env-saaf` object; explicit CLI arguments take precedence and unknown or invalid config entries fail clearly (fixes #354).
+
 - Added: `.env` interpolation support in `parseEnvFile` (and `loadEnv` /
   `loadEnvAsync`) for POSIX `${VAR:?message}` / `${VAR?message}` required-value
   checks and `${VAR:+alt}` / `${VAR+alt}` alternate expansions, including nested
