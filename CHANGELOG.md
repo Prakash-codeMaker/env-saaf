@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: `check` flags likely real credentials in `.env.example` (provider keys, AWS access-key IDs, database URLs with passwords, 40-character hex tokens and long high-entropy values); findings identify the key and never disclose the value in text or `--json` output, while common placeholders are ignored (fixes #416).
+
 - Fixed: duration arrays accept human duration strings or numeric milliseconds for `min` / `max` and enforce the bounds on each item. Generated examples respect the bounds, and JSON Schema exports them on `items` (fixes #427).
 
 - Fixed: `duration` choices accept human duration strings such as `15m`, comparing them as milliseconds alongside numeric choices. Array items and JSON Schema enums use the same normalization, without modifying the supplied schema (fixes #426).
