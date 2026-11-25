@@ -450,6 +450,55 @@ function readEnvFile(filePath) {
   }
 }
 
+// Issue #416: catch credentials copied into the committed template. These
+// checks intentionally report keys and reason codes only; template values
+// must never be echoed to text output or the --json result.
+const PLACEHOLDER_VALUE_RE = /^(?:<[^>]+>|x{3,}|(?:your|replace|change|example|placeholder|dummy)(?:[-_ ].*)?|changeme|todo|redacted|none|null|undefined)$/i;
+
+function isPlaceholderValue(value) {
+  return PLACEHOLDER_VALUE_RE.test(value)
+    || /^(?:pass|password|passwd|secret|changeme|change-me|example|placeholder|redacted|xxx+)$/i.test(value);
+}
+
+function stringEntropy(value) {
+  const counts = new Map();
+  for (const char of value) counts.set(char, (counts.get(char) || 0) + 1);
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const probability = count / value.length;
+    entropy -= probability * Math.log2(probability);
+  }
+  return entropy;
+}
+
+function detectExampleSecrets(values) {
+  const findings = [];
+  for (const [key, raw] of Object.entries(values)) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim();
+    if (!value || isPlaceholderValue(value)) continue;
+
+    let reason;
+    if (/^sk-[A-Za-z0-9_-]{16,}$/.test(value) && !isPlaceholderValue(value.slice(3))) {
+      reason = 'provider key';
+    } else if (/^AKIA[0-9A-Z]{16}$/.test(value)) {
+      reason = 'AWS access key';
+    } else {
+      const databaseUrl = /^postgres(?:ql)?:\/\/[^\s/:@]+:([^\s/@]+)@/i.exec(value);
+      if (databaseUrl && !isPlaceholderValue(databaseUrl[1])) {
+        reason = 'database URL with password';
+      }
+    }
+    if (!reason && /^[A-Fa-f0-9]{40}$/.test(value)) {
+      reason = '40-character hex token';
+    } else if (!reason && value.length >= 32 && stringEntropy(value) >= 4.2) {
+      reason = 'high-entropy string';
+    }
+    if (reason) findings.push({ key, reason, value: '[REDACTED]' });
+  }
+  return findings;
+}
+
 // Issue #184: would Node treat this schema file as an ES module? A .js file
 // is ESM when the nearest package.json above it says "type": "module"
 // (a .mjs file always is, a .cjs file never is). A schema Node treats as ESM
@@ -720,7 +769,9 @@ async function runCheck() {
     }
     fatalExit(2);
   }
-  const documented = Object.keys(readEnvFile(examplePath));
+  const exampleValues = readEnvFile(examplePath);
+  const documented = Object.keys(exampleValues);
+  const exampleSecrets = detectExampleSecrets(exampleValues);
   const used = scanDir(dir, { exclude: excludeOpts });
   const { usedNotDocumented, documentedNotUsed } = diffEnv(used, documented);
   // The real .env is not committed, so only compare keys when it is actually present
@@ -783,11 +834,11 @@ async function runCheck() {
   // already reads at least one variable).
   const scaffoldAhead = used.length === 0 && documentedNotUsed.length > 0
     && usedNotDocumented.length === 0 && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0
-    && schemaNotDocumented.length === 0 && documentedNotInSchema.length === 0;
+    && schemaNotDocumented.length === 0 && documentedNotInSchema.length === 0 && exampleSecrets.length === 0;
   const scaffoldNote = `no process.env usage found in code yet — ${documentedNotUsed.length} ${documentedNotUsed.length === 1 ? 'key' : 'keys'} in ${fileOpt} ${documentedNotUsed.length === 1 ? 'is' : 'are'} not used by any code yet`;
   const ok = scaffoldAhead || (usedNotDocumented.length === 0 && documentedNotUsed.length === 0
     && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0
-    && schemaNotDocumented.length === 0 && documentedNotInSchema.length === 0);
+    && schemaNotDocumented.length === 0 && documentedNotInSchema.length === 0 && exampleSecrets.length === 0);
   // Issue #352: --values validates its own file, so a missing .env is not a skip then.
   const skippedValues = schemaOpt && !fileExplicit && !envFileFound && valuesOpt === null;
   if (skippedValues && !jsonMode) {
@@ -805,6 +856,7 @@ async function runCheck() {
       invalid,
       envExtra,
       envMissing,
+      exampleSecrets,
     };
     if (valuesOpt !== null) result.valuesFile = valuesOpt;
     if (schemaOpt) {
@@ -824,8 +876,11 @@ async function runCheck() {
     invalid.forEach(e => console.log(`INVALID${valuesOpt !== null ? ` in ${valuesOpt}` : ''}: ${e}`));
     schemaNotDocumented.forEach(k => console.log(`NOT DOCUMENTED: ${k} (in schema, missing from ${fileOpt})`));
     documentedNotInSchema.forEach(k => console.log(`NOT IN SCHEMA: ${k} (in ${fileOpt}, not declared in the schema)`));
+    exampleSecrets.forEach(({ key, reason }) => {
+      console.log(`SECRET-LIKE VALUE in ${fileOpt}: ${key} (suspected ${reason}; value redacted)`);
+    });
     if (!usedNotDocumented.length && !documentedNotUsed.length && !envExtra.length && !envMissing.length && !invalid.length
-      && !schemaNotDocumented.length && !documentedNotInSchema.length) {
+      && !schemaNotDocumented.length && !documentedNotInSchema.length && !exampleSecrets.length) {
       console.log(`env-saaf: all clean — code and ${fileOpt} match.`);
     }
   }
