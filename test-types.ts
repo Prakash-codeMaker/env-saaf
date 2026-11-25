@@ -147,6 +147,32 @@ const validatedHost: string = validated.REPLICA_HOST;
 const validatedFlag: boolean = validated.FLAG;
 const validatedNotes: string | undefined = validated.NOTES;
 
+// Issue #346: cross-field hooks receive schema-inferred, already-coerced values.
+const crossFieldTyped = validateEnv({
+  CACHE_TTL: { type: 'duration', required: true },
+  SESSION_TTL: { type: 'duration', required: true },
+}, { CACHE_TTL: '30s', SESSION_TTL: '2m' }, {
+  rules: values => {
+    const cacheTtl: number = values.CACHE_TTL;
+    const sessionTtl: number = values.SESSION_TTL;
+    return cacheTtl < sessionTtl ? undefined : 'CACHE_TTL must be smaller';
+  },
+});
+const crossFieldTypedTtl: number = crossFieldTyped.CACHE_TTL;
+const loadedWithCrossFieldRule: number = loadEnv(
+  { PORT: { type: 'port', required: true } },
+  { path: '.env', rules: values => {
+    const port: number = values.PORT;
+    return port > 0 ? undefined : 'PORT must be positive';
+  } },
+).PORT;
+const asyncCrossFieldRule: Promise<number> = loadEnvAsync(
+  { PORT: { type: 'port', required: true } },
+  { path: '.env', rules: [values => values.PORT > 0 ? undefined : 'PORT must be positive'] },
+).then(values => values.PORT);
+// @ts-expect-error schema-level hooks must return strings or nothing
+validateEnv({ PORT: { type: 'port' } }, { PORT: '3000' }, { rules: () => 123 });
+
 // Issue #286: both pattern forms preserve inferred string result types.
 const patterned = validateEnv({
   NAME: { pattern: '^[A-Z]+$', required: true },
