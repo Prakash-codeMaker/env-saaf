@@ -72,6 +72,7 @@ if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
 let fileOpt = '.env.example';
 let fileExplicit = false;
 let schemaOpt = null;
+let schemaExplicit = false;
 let jsonMode = false;
 let jsonSchemaOpt = false;
 let writeOpt = null;
@@ -108,8 +109,8 @@ for (let i = 1; i < argv.length; i++) {
   }
   if (a === '--file' && argv[i + 1]) { fileOpt = argv[++i]; fileExplicit = true; }
   else if (a.startsWith('--file=')) { fileOpt = a.slice('--file='.length); fileExplicit = true; }
-  else if (a === '--schema' && argv[i + 1]) schemaOpt = argv[++i];
-  else if (a.startsWith('--schema=')) schemaOpt = a.slice('--schema='.length);
+  else if (a === '--schema' && argv[i + 1]) { schemaOpt = argv[++i]; schemaExplicit = true; }
+  else if (a.startsWith('--schema=')) { schemaOpt = a.slice('--schema='.length); schemaExplicit = true; }
   else if (a === '--json') jsonMode = true;
   else if (a === '--json-schema') jsonSchemaOpt = true;
   else if (a === '--write') writeOpt = '.env.example';
@@ -125,13 +126,54 @@ for (let i = 1; i < argv.length; i++) {
   else if (a.startsWith('--')) unknownFlags.push(a);
   else positional.push(a);
 }
-const dir = positional[0] || process.cwd();
+const dirExplicit = positional.length > 0;
+let dir = positional[0] || process.cwd();
 // Issue #232: with a bare `--from-example`, a second positional names the
 // example file instead of being mistaken for the directory.
 let exampleOpt = null;
 if (fromExampleOpt !== null) {
   if (fromExampleOpt === true) exampleOpt = positional[1] || '.env.example';
   else exampleOpt = fromExampleOpt;
+}
+
+// Issue #354: `check` can take defaults from the current project's package.json.
+// Explicit positional directories and flags always take precedence.
+if (cmd === 'check') {
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  if (fs.existsSync(packageJsonPath)) {
+    let packageJson;
+    try {
+      packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    } catch (e) {
+      const message = `env-saaf: cannot parse package.json: ${e.message}`;
+      if (jsonMode) console.log(JSON.stringify({ ok: false, error: message }));
+      else console.error(message);
+      fatalExit(2);
+    }
+    const config = packageJson && packageJson['env-saaf'];
+    if (config !== undefined) {
+      const failConfig = detail => {
+        const message = `env-saaf: invalid package.json "env-saaf" config: ${detail}`;
+        if (jsonMode) console.log(JSON.stringify({ ok: false, error: message }));
+        else console.error(message);
+        fatalExit(2);
+      };
+      if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        failConfig('expected an object with optional "directory", "file", and "schema" strings');
+      }
+      const supported = new Set(['directory', 'file', 'schema']);
+      const unknown = Object.keys(config).find(key => !supported.has(key));
+      if (unknown) failConfig(`unknown key "${unknown}" (supported: directory, file, schema)`);
+      for (const key of supported) {
+        if (config[key] !== undefined && (typeof config[key] !== 'string' || config[key].trim() === '')) {
+          failConfig(`"${key}" must be a non-empty string`);
+        }
+      }
+      if (!dirExplicit && config.directory !== undefined) dir = path.resolve(process.cwd(), config.directory);
+      if (!fileExplicit && config.file !== undefined) { fileOpt = config.file; fileExplicit = true; }
+      if (!schemaExplicit && config.schema !== undefined) schemaOpt = config.schema;
+    }
+  }
 }
 
 // Issue #278: flags are per-command. A flag the parser recognised but the
