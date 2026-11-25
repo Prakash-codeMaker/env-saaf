@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: seeded `validateEnv` property tests for scalar coercion, arrays, generated examples, sensitive-value masking and numeric bounds (issue #419).
+
 - Fixed: duration arrays accept human duration strings or numeric milliseconds for `min` / `max` and enforce the bounds on each item. Generated examples respect the bounds, and JSON Schema exports them on `items` (fixes #427).
 
 - Fixed: `duration` choices accept human duration strings such as `15m`, comparing them as milliseconds alongside numeric choices. Array items and JSON Schema enums use the same normalization, without modifying the supplied schema (fixes #426).
