@@ -146,16 +146,15 @@ try {
       SESSION_TOKEN: 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
     };
     const keys = Object.keys(fakeSecrets);
-    const template = [
-      ...Object.entries(fakeSecrets).map(([key, value]) => \`\${key}=\${value}\`),
+    const template = Object.entries(fakeSecrets).map(([key, value]) => key + '=' + value).concat([
       'API_KEY=your-key-here',
       'EXAMPLE_TOKEN=<redacted>',
       'DEBUG_TOKEN=xxx',
       'DATABASE_URL_SAMPLE=postgres://user:password@localhost/app',
       '',
-    ].join('\n');
-    const code = \`console.log(\${keys.concat(['API_KEY', 'EXAMPLE_TOKEN', 'DEBUG_TOKEN', 'DATABASE_URL_SAMPLE'])
-      .map(key => \`process.env.\${key}\`).join(', ')});\n\`;
+    ]).join('\n');
+    const code = 'console.log(' + keys.concat(['API_KEY', 'EXAMPLE_TOKEN', 'DEBUG_TOKEN', 'DATABASE_URL_SAMPLE'])
+      .map(key => 'process.env.' + key).join(', ') + ');\n';
     const dir = mkProject({ 'src/app.js': code, '.env.example': template });
 
     const jsonRun = run(['check', dir, '--json'], dir);
@@ -198,6 +197,22 @@ try {
     const clean = run(['check', placeholders, '--json'], placeholders);
     assert.strictEqual(clean.status, 0, clean.stdout + clean.stderr);
     assert.deepStrictEqual(JSON.parse(clean.stdout).exampleSecrets, []);
+
+    // Values produced by generateExample are examples/placeholders, not live credentials.
+    const { generateExample } = require('./index');
+    const generatedSchema = {
+      TRACE_ID: { type: 'uuid' },
+      TRACE_IDS: { type: 'array', of: 'uuid' },
+      API_KEY: { type: 'string', sensitive: true },
+      CALLBACK_URL: { type: 'url' },
+    };
+    const generated = mkProject({
+      'src/app.js': 'console.log(process.env.TRACE_ID, process.env.TRACE_IDS, process.env.API_KEY, process.env.CALLBACK_URL);\n',
+      '.env.example': generateExample(generatedSchema),
+    });
+    const generatedCheck = run(['check', generated, '--json'], generated);
+    assert.strictEqual(generatedCheck.status, 0, generatedCheck.stdout + generatedCheck.stderr);
+    assert.deepStrictEqual(JSON.parse(generatedCheck.stdout).exampleSecrets, []);
   }
 
   {
