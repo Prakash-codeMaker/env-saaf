@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: `check --schema` compares flattened schema keys with the selected `.env.example` file, reporting schema keys missing from the example and example keys absent from the schema; both findings fail the check and appear in dedicated JSON arrays (fixes #358).
+
 - Added: `.env` interpolation support in `parseEnvFile` (and `loadEnv` /
   `loadEnvAsync`) for POSIX `${VAR:?message}` / `${VAR?message}` required-value
   checks and `${VAR:+alt}` / `${VAR+alt}` alternate expansions, including nested
