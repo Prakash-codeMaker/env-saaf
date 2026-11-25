@@ -173,6 +173,40 @@ try {
     assert.ok(Array.isArray(parsed.invalid) && parsed.invalid.length === 1 && /PORT/.test(parsed.invalid[0]));
   }
 
+  // --- issue #358: --schema compares flattened schema keys with the example file ---
+  {
+    const dir = mkProject({
+      'src/app.js': 'void process.env.PORT; void process.env.DB_HOST; void process.env.EXAMPLE_ONLY;\n',
+      '.env.example': 'PORT=\nDB_HOST=\nEXAMPLE_ONLY=\n',
+      'env.schema.js': "module.exports = { PORT: { type: 'port' }, DB: { prefix: 'DB_', schema: { HOST: { type: 'host' }, PORT: { type: 'port' } } }, SCHEMA_ONLY: { type: 'string' } };\n",
+    });
+    const text = run(['check', dir, '--schema', 'env.schema.js'], dir);
+    assert.strictEqual(text.status, 1);
+    assert.match(text.stdout, /NOT DOCUMENTED: DB_PORT/);
+    assert.match(text.stdout, /NOT DOCUMENTED: SCHEMA_ONLY/);
+    assert.match(text.stdout, /NOT IN SCHEMA: EXAMPLE_ONLY/);
+
+    const json = run(['check', dir, '--schema', 'env.schema.js', '--json'], dir);
+    assert.strictEqual(json.status, 1);
+    const parsed = JSON.parse(json.stdout);
+    assert.deepStrictEqual(parsed.schemaMissingFromExample, ['DB_PORT', 'SCHEMA_ONLY']);
+    assert.deepStrictEqual(parsed.exampleMissingFromSchema, ['EXAMPLE_ONLY']);
+    assert.deepStrictEqual(parsed.missing, []);
+    assert.deepStrictEqual(parsed.unused, []);
+
+    // The new arrays stay empty for a matching schema, including grouped prefixes.
+    const cleanDir = mkProject({
+      'src/app.js': 'void process.env.PORT; void process.env.DB_HOST;\n',
+      '.env.example': 'PORT=\nDB_HOST=\n',
+      'env.schema.js': "module.exports = { PORT: { type: 'port' }, DB: { prefix: 'DB_', schema: { HOST: { type: 'host' } } } };\n",
+    });
+    const clean = run(['check', cleanDir, '--schema', 'env.schema.js', '--json'], cleanDir);
+    assert.strictEqual(clean.status, 0, `${clean.stdout}${clean.stderr}`);
+    const cleanParsed = JSON.parse(clean.stdout);
+    assert.deepStrictEqual(cleanParsed.schemaMissingFromExample, []);
+    assert.deepStrictEqual(cleanParsed.exampleMissingFromSchema, []);
+  }
+
   // --- check --json-schema: stdout is the draft 2020-12 JSON Schema for the --schema file (issue #268)
   {
     const { toJsonSchema } = require('./index');
