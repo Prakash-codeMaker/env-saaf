@@ -492,7 +492,7 @@ function detectExampleSecrets(values) {
     }
     if (!reason && /^[A-Fa-f0-9]{40}$/.test(value)) {
       reason = '40-character hex token';
-    } else if (!reason && value.length >= 32 && stringEntropy(value) >= 3.8) {
+    } else if (!reason && value.length >= 32 && stringEntropy(value) >= 4.2) {
       reason = 'high-entropy string';
     }
     if (reason) findings.push({ key, reason, value: '[REDACTED]' });
