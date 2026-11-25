@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added: `check --schema --values <file>` validates a selected environment file (such as `.env.production`) independently of the `.env.example` comparison template; missing values files are reported as input errors, and JSON output identifies the file used (fixes #352).
+
 - Added: `.env` interpolation support in `parseEnvFile` (and `loadEnv` /
   `loadEnvAsync`) for POSIX `${VAR:?message}` / `${VAR?message}` required-value
   checks and `${VAR:+alt}` / `${VAR+alt}` alternate expansions, including nested
