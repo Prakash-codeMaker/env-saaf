@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added: top-level `rules` hooks for cross-field validation. A single hook or
+  an array of hooks receives the fully coerced, nested result and can return
+  one or more global diagnostics, which join `EnvSaafError.errors/details`
+  and non-throwing results. Hooks are forwarded by `loadEnv` /
+  `loadEnvAsync` and skipped when key-level validation has already failed
+  (fixes #346).
+
 - Added: `.env` interpolation support in `parseEnvFile` (and `loadEnv` /
   `loadEnvAsync`) for POSIX `${VAR:?message}` / `${VAR?message}` required-value
   checks and `${VAR:+alt}` / `${VAR+alt}` alternate expansions, including nested
