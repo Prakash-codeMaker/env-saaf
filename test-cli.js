@@ -173,6 +173,48 @@ try {
     assert.ok(Array.isArray(parsed.invalid) && parsed.invalid.length === 1 && /PORT/.test(parsed.invalid[0]));
   }
 
+  // --- issue #354: package.json defaults for check, with CLI overrides ---
+  {
+    const dir = mkProject({
+      'package.json': JSON.stringify({ name: 'configured-project', 'env-saaf': { directory: 'app', file: '.env.sample', schema: 'env.schema.js' } }),
+      'app/src/app.js': 'void process.env.PORT;\\n',
+      'app/.env.sample': 'PORT=3000\\n',
+      'app/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\\n",
+      'app/.env.alt': 'PORT=not-a-port\\nEXTRA=value\\n',
+      'app/env.schema-alt.js': "module.exports = { PORT: { type: 'string', required: true } };\\n",
+      'other/src/app.js': 'void process.env.PORT;\\n',
+      'other/.env.sample': 'PORT=3000\\n',
+      'other/env.schema.js': "module.exports = { PORT: { type: 'port', required: true } };\\n",
+    });
+    // With no positional directory or flags, all three package defaults apply.
+    const defaults = run(['check'], dir);
+    assert.strictEqual(defaults.status, 0, `${defaults.stdout}${defaults.stderr}`);
+    assert.match(defaults.stdout, /all clean/);
+
+    // Explicit command-line paths override package defaults.
+    const flags = run(['check', '--file', '.env.alt', '--schema', 'env.schema-alt.js'], dir);
+    assert.strictEqual(flags.status, 1);
+    assert.match(flags.stdout, /UNUSED: EXTRA/);
+    assert.ok(!flags.stdout.includes('INVALID: PORT'), 'explicit schema must override the configured schema');
+
+    // An explicit positional directory overrides packageConfig.directory.
+    const positional = run(['check', 'other'], dir);
+    assert.strictEqual(positional.status, 0, `${positional.stdout}${positional.stderr}`);
+    assert.match(positional.stdout, /all clean/);
+  }
+
+  {
+    const dir = mkProject({
+      'package.json': JSON.stringify({ 'env-saaf': { schema: 'env.schema.js', typo: true } }),
+      '.env.example': 'PORT=\\n',
+      'src/app.js': 'void process.env.PORT;\\n',
+    });
+    const result = run(['check', '--json'], dir);
+    assert.strictEqual(result.status, 2);
+    const parsed = JSON.parse(result.stdout);
+    assert.match(parsed.error, /unknown key "typo"/);
+  }
+
   // --- check --json-schema: stdout is the draft 2020-12 JSON Schema for the --schema file (issue #268)
   {
     const { toJsonSchema } = require('./index');
