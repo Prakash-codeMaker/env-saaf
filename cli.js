@@ -454,7 +454,7 @@ function readEnvFile(filePath) {
 // Issue #416: catch credentials copied into the committed template. These
 // checks intentionally report keys and reason codes only; template values
 // must never be echoed to text output or the --json result.
-const PLACEHOLDER_VALUE_RE = /^(?:<[^>]+>|x{3,}|xxx+|your(?:[-_ ]|$)|replace(?:[-_ ]|$)|change(?:[-_ ]|$)|changeme$|example(?:[-_ ]|$)|placeholder(?:[-_ ]|$)|dummy(?:[-_ ]|$)|todo$|redacted$|none$|null$|undefined$)/i;
+const PLACEHOLDER_VALUE_RE = /^(?:<[^>]+>|x{3,}|(?:your|replace|change|example|placeholder|dummy)(?:[-_ ].*)?|changeme|todo|redacted|none|null|undefined)$/i;
 
 function isPlaceholderValue(value) {
   return PLACEHOLDER_VALUE_RE.test(value)
@@ -495,9 +495,6 @@ function detectExampleSecrets(values) {
     } else if (!reason && value.length >= 32 && stringEntropy(value) >= 3.8) {
       reason = 'high-entropy string';
     }
-    /*
-    */
-
     if (reason) findings.push({ key, reason, value: '[REDACTED]' });
   }
   return findings;
