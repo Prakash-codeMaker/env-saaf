@@ -62,7 +62,7 @@ function makeRule(type, value, seed) {
   }
   if (NUMERIC_TYPES.has(type)) {
     rule.min = 0;
-    rule.max = type === 'duration' ? 100000 : 100000;
+    rule.max = 100000;
   }
   return rule;
 }
@@ -70,7 +70,13 @@ function makeRule(type, value, seed) {
 function assertAcceptedTwice(schema, env, context) {
   const first = validateEnv(schema, env, { throwOnError: false });
   assert.deepStrictEqual(first.errors, [], `generated value was rejected\n${context}`);
-  const second = validateEnv(schema, first.env, { throwOnError: false });
+  // Date rules return Date instances, while the public env input contract is
+  // text. Serialize scalar dates before replaying the accepted output.
+  const replay = Object.fromEntries(Object.entries(first.env).map(([key, value]) => [
+    key,
+    value instanceof Date ? value.toISOString() : value,
+  ]));
+  const second = validateEnv(schema, replay, { throwOnError: false });
   assert.deepStrictEqual(second.errors, [], `coerced value was not accepted again\n${context}`);
   assert.deepStrictEqual(second.env, first.env, `coercion was not idempotent\n${context}`);
 }
