@@ -745,6 +745,34 @@ assert.ok(!ex.includes('sk_live'));
   }
 }
 
+// Issue #339: scanDir follows a symlinked package once and survives a cycle
+{
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { scanDir } = require('./index');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'env-saaf-scan-link-'));
+  const real = path.join(root, 'real');
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(real);
+  fs.mkdirSync(path.join(proj, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(real, 'real.js'), 'process.env.REAL_SECRET;');
+  fs.writeFileSync(path.join(proj, 'src', 'app.js'), 'process.env.PORT;');
+  try {
+    fs.symlinkSync(path.relative(path.join(proj, 'src'), real), path.join(proj, 'src', 'linked'), 'dir');
+    // A cycle must not hang the walk.
+    fs.symlinkSync('..', path.join(proj, 'src', 'loop'), 'dir');
+  } catch {
+    fs.rmSync(root, { recursive: true, force: true });
+    console.log('symlink tests skipped (no symlink permission)');
+  }
+  try {
+    assert.deepStrictEqual(scanDir(proj), ['PORT', 'REAL_SECRET']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 // Issue #235: scanDir also scans single-file components (.vue/.svelte/.astro)
 {
   const fs = require('node:fs');
