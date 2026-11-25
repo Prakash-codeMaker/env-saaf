@@ -869,7 +869,7 @@ expect(env.CACHE_TTL).toBe(300_000);
 
 ### Keep `.env.example` honest (CLI)
 
-CLI output is plain text by default, including in pipes and CI. For scripts that set a shared color preference, pass `--no-color` before or after the command, or set `NO_COLOR=1`.
+CLI output is plain text by default, including in pipes and CI. For scripts that set a shared color preference, pass `--no-color` before or after the command, or set `NO_COLOR=1`. `check` can also read reusable defaults from the current project's `package.json` under an `env-saaf` key:
 
 ```bash
 npx env-saaf --version      # print the installed version
@@ -889,6 +889,20 @@ npx env-saaf init .  # scaffold a starter env.schema.js (commented type examples
 npx env-saaf init . --from-example  # infer the starter schema from an existing .env.example instead (it is left untouched)
 npx env-saaf init . --from-example --groups  # fold keys sharing a prefix into a grouped schema
 ```
+
+Add this to `package.json` to make the same `check` paths the default:
+
+```json
+{
+  "env-saaf": {
+    "directory": "config",
+    "file": ".env.example",
+    "schema": "env.schema.js"
+  }
+}
+```
+
+`directory` is relative to the directory where the command is run; `file` and `schema` are resolved relative to the effective check directory. An explicit positional directory or `--file` / `--schema` flag overrides its matching package default. Unknown keys and non-string values are usage errors (exit 2). With no `env-saaf` key, the CLI behaves as before.
 
 Starting a new project? `env-saaf init` writes a starter `env.schema.js` with commented examples of the main types (`string`, `int`, `boolean`, `port`, `url`, `email`, `duration`, `host`) and generates a matching `.env.example` from it. Every suggested placeholder is a value that validates against its own rule, so a generated `.env.example` passes `check` out of the box (the `file` type is the exception — its `./config.json` path must exist first). In a project whose `package.json` has `"type": "module"`, the starter is written as `env.schema.cjs` instead, so it still loads with `require()` — name your own schema with a `.cjs` extension there too. The first `check` after `init` passes with a note until code reads the variables — keys the scaffold declares but no code uses yet are not treated as drift. Once code reads at least one variable, unused keys fail the check again, as before. Either file being present is a refusal (exit 1, naming the files) unless `--force` is passed; `--schema <file>` names the schema file instead of `env.schema.js`.
 
