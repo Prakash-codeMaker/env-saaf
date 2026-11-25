@@ -159,6 +159,38 @@ try {
     });
   }
 
+  // --- issue #418: scan and check accept one supported source file ----------
+  {
+    const dir = mkProject({
+      'src/app.js': 'console.log(process.env.ONLY);\n',
+      'src/other.js': 'console.log(process.env.NOT_SCANNED);\n',
+      '.env.example': 'ONLY=\n',
+      'README.md': '# not source code\n',
+    });
+    const scanned = run(['scan', 'src/app.js', '--json'], dir);
+    assert.strictEqual(scanned.status, 0, scanned.stdout + scanned.stderr);
+    assert.deepStrictEqual(JSON.parse(scanned.stdout), {
+      ok: true,
+      vars: ['ONLY'],
+      unused: [],
+      locations: { ONLY: [{ file: 'src/app.js', line: 1 }] },
+    });
+
+    const checked = run(['check', 'src/app.js'], dir);
+    assert.strictEqual(checked.status, 0, checked.stdout + checked.stderr);
+    assert.match(checked.stdout, /all clean/);
+
+    for (const command of ['scan', 'check']) {
+      const missing = run([command, 'missing.js'], dir);
+      assert.strictEqual(missing.status, 2, command + ' missing file should be a usage error');
+      assert.match(missing.stderr, /missing\.js does not exist/);
+
+      const unsupported = run([command, 'README.md'], dir);
+      assert.strictEqual(unsupported.status, 2, command + ' unsupported file should be a usage error');
+      assert.match(unsupported.stderr, /README\.md is not a supported code file/);
+    }
+  }
+
   // --- issue #356: init --from-example infers the unambiguous shapes ---------
   {
     const example = [
