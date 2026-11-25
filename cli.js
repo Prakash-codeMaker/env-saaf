@@ -67,8 +67,8 @@ if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
 // Without --schema there is nothing to convert, so the flag errors out.
 // --write / --write=<file> ('example' only): save the draft to .env.example (or the file
 // named) instead of printing it; --force allows overwriting an existing file
-// --watch ('check' and 'scan' only): run once, then re-run (debounced) whenever the scanned
-// tree, the env template or the schema file changes (issue #230)
+// --watch ('check' and 'scan' only): re-run when the scanned tree, env template, schema,
+// or selected --values file changes (issue #230).
 let fileOpt = '.env.example';
 let fileExplicit = false;
 let schemaOpt = null;
