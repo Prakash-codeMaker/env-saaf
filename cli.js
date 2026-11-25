@@ -2,10 +2,10 @@
 'use strict';
 /**
  * env-saaf CLI
- *   env-saaf check [dir] [--file name] [--schema file] [--json] [--json-schema] [--watch] — scan code for process.env usage, compare with
+ *   env-saaf check [dir] [--file name] [--schema file] [--values file] [--json] [--json-schema] [--watch] — scan code for process.env usage, compare with
  *                           .env.example (or the --file given); exit 1 if anything
- *                           used is not documented. --schema also validates the values
- *                           of the real .env file against the schema the file exports
+ *                           used is not documented. --schema validates a values file
+ *                           (the real .env by default, or --values <file>) against its schema
  *                           (issue #90); --json emits machine-readable output. --json-schema
  *                           prints the schema file as a draft 2020-12 JSON Schema
  *                           document instead of running the check (issue #268). A scaffold
@@ -51,7 +51,7 @@ if (argv.includes('--version') || argv.includes('-v')) {
 // Output is already plain in every mode, including when NO_COLOR is set.
 while (argv[0] === '--no-color') argv.shift();
 const cmd = argv[0];
-const USAGE = 'Usage: env-saaf check [dir] [--file name] [--schema file] [--json] [--json-schema] [--watch] | env-saaf scan [dir | --stdin] [--file name] [--json] [--watch] | env-saaf example [dir] [--write[=file]] [--force] [--schema file] | env-saaf init [dir] [--schema file] [--force] [--from-example[=file]]\n'
+const USAGE = 'Usage: env-saaf check [dir] [--file name] [--schema file] [--values file] [--json] [--json-schema] [--watch] | env-saaf scan [dir | --stdin] [--file name] [--json] [--watch] | env-saaf example [dir] [--write[=file]] [--force] [--schema file] | env-saaf init [dir] [--schema file] [--force] [--from-example[=file]]\n'
   + 'Global options: --no-color, --version / -v (before or after the command).';
 // --help / -h / help: print usage and exit 0 (asking for help is not an error — this used to exit 2)
 if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
@@ -59,8 +59,8 @@ if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
   process.exit(0);
 }
 // --file <name> or --file=<name> ('check' and 'scan'): which template file to compare against
-// --schema <file> or --schema=<file> ('check' only): validate the env values against the
-// schema the file exports (issue #90). Opt-in: without it the check is presence-only.
+// --schema <file> or --schema=<file> ('check' only): validate env values against the schema
+// the file exports (issue #90). --values <file> selects a values file other than .env.
 // --json: machine-readable output for check and scan
 // --json-schema ('check' only): print the --schema file as a draft 2020-12
 // JSON Schema document to stdout instead of running the check (issue #268).
@@ -72,6 +72,7 @@ if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
 let fileOpt = '.env.example';
 let fileExplicit = false;
 let schemaOpt = null;
+let valuesOpt = null;
 let jsonMode = false;
 let jsonSchemaOpt = false;
 let writeOpt = null;
@@ -110,6 +111,9 @@ for (let i = 1; i < argv.length; i++) {
   else if (a.startsWith('--file=')) { fileOpt = a.slice('--file='.length); fileExplicit = true; }
   else if (a === '--schema' && argv[i + 1]) schemaOpt = argv[++i];
   else if (a.startsWith('--schema=')) schemaOpt = a.slice('--schema='.length);
+  else if (a === '--values' && argv[i + 1] && !argv[i + 1].startsWith('--')) valuesOpt = argv[++i];
+  else if (a === '--values' || a === '--values=') valuelessFlags.push('--values');
+  else if (a.startsWith('--values=')) valuesOpt = a.slice('--values='.length);
   else if (a === '--json') jsonMode = true;
   else if (a === '--json-schema') jsonSchemaOpt = true;
   else if (a === '--write') writeOpt = '.env.example';
@@ -140,7 +144,7 @@ if (fromExampleOpt !== null) {
 // like `--jsoon` in CI produced text output where JSON was expected. Fail
 // fast with exit 2, in the same message shape as other usage errors.
 const COMMAND_FLAGS = {
-  check: ['--file', '--schema', '--json', '--json-schema', '--watch'],
+  check: ['--file', '--schema', '--values', '--json', '--json-schema', '--watch'],
   scan: ['--file', '--json', '--watch', '--stdin'],
   example: ['--write', '--force', '--schema'],
   init: ['--schema', '--force', '--from-example', '--groups'],
@@ -149,6 +153,7 @@ if (COMMAND_FLAGS[cmd]) {
   const seenFlags = new Set();
   if (fileExplicit) seenFlags.add('--file');
   if (schemaOpt !== null) seenFlags.add('--schema');
+  if (valuesOpt !== null) seenFlags.add('--values');
   if (jsonMode) seenFlags.add('--json');
   if (jsonSchemaOpt) seenFlags.add('--json-schema');
   if (writeOpt !== null) seenFlags.add('--write');
@@ -163,6 +168,8 @@ if (COMMAND_FLAGS[cmd]) {
   else {
     const bad = [...seenFlags].find(f => !COMMAND_FLAGS[cmd].includes(f));
     if (bad) flagError = `flag ${bad} is not supported for ${cmd}`;
+    else if (valuesOpt !== null && !schemaOpt) flagError = '--values needs --schema <file>';
+    else if (valuesOpt !== null && jsonSchemaOpt) flagError = '--values cannot be combined with --json-schema';
     else if (stdinOpt && positional.length > 0) flagError = '--stdin cannot be combined with a directory argument';
     else if (stdinOpt && watchOpt) flagError = '--stdin cannot be combined with --watch';
   }
@@ -563,19 +570,34 @@ async function runCheck() {
     envExtra = envDiff.usedNotDocumented;
     envMissing = envDiff.documentedNotUsed;
   }
-  // Issue #90: --schema validates the values of the real env file against the
-  // schema the file exports (module.exports = { PORT: { type: 'port', ... } }).
-  // An explicit --file names the file to validate; otherwise the real .env wins
-  // when present — the template's placeholders are not real values, so with no
-  // .env and no explicit --file there is nothing real to validate and the step
-  // is skipped. Failures land in the existing `invalid` field (the library's
-  // errors already name the key) and fail the check like a missing key.
+  // Issue #90: --schema validates values against the schema the file exports.
+  // By default it uses the real .env; --values selects a different values file
+  // without changing --file, which remains the code/example comparison template.
+  // Keep the historical explicit --file validation behaviour when --values is absent.
   let invalid = [];
+  let valuesFileUsed = null;
   if (schemaOpt) {
     const schema = await loadSchemaFile();
-    const targetName = fileExplicit ? fileOpt : (envFileFound ? '.env' : null);
+    const targetName = valuesOpt !== null
+      ? valuesOpt
+      : fileExplicit ? fileOpt : (envFileFound ? '.env' : null);
     if (targetName) {
-      const values = readEnvFile(path.join(dir, targetName));
+      const valuesPath = path.resolve(dir, targetName);
+      if (valuesOpt !== null) {
+        let isFile = false;
+        try { isFile = fs.statSync(valuesPath).isFile(); } catch { /* reported below */ }
+        if (!isFile) {
+          const exists = fs.existsSync(valuesPath);
+          const detail = exists ? 'is not a regular file' : 'was not found';
+          const message = `env-saaf: values file ${valuesOpt} ${detail} in ${dir}`;
+          if (jsonMode) console.log(JSON.stringify({ ok: false, error: message, valuesFile: valuesOpt }));
+          else console.error(message);
+          fatalExit(2);
+        }
+        valuesFileUsed = valuesOpt;
+        if (!jsonMode) console.log(`env-saaf: validating schema values from ${valuesOpt}`);
+      }
+      const values = readEnvFile(valuesPath);
       try {
         validateEnv(schema, values);
       } catch (e) {
@@ -596,7 +618,7 @@ async function runCheck() {
   const scaffoldNote = `no process.env usage found in code yet — ${documentedNotUsed.length} ${documentedNotUsed.length === 1 ? 'key' : 'keys'} in ${fileOpt} ${documentedNotUsed.length === 1 ? 'is' : 'are'} not used by any code yet`;
   const ok = scaffoldAhead || (usedNotDocumented.length === 0 && documentedNotUsed.length === 0
     && envExtra.length === 0 && envMissing.length === 0 && invalid.length === 0);
-  const skippedValues = schemaOpt && !fileExplicit && !envFileFound;
+  const skippedValues = schemaOpt && valuesOpt === null && !fileExplicit && !envFileFound;
   if (skippedValues && !jsonMode) {
     console.log('env-saaf: no .env file found — values were not validated.');
   }
@@ -613,6 +635,7 @@ async function runCheck() {
       envExtra,
       envMissing,
     };
+    if (valuesFileUsed !== null) result.valuesFile = valuesFileUsed;
     if (skippedValues) result.envFileFound = false;
     if (scaffoldAhead) result.note = scaffoldNote;
     console.log(JSON.stringify(result));
@@ -691,6 +714,11 @@ function watchLoop() {
     const schemaDir = path.dirname(path.resolve(dir, schemaOpt));
     const inside = [...watchDirs].some(w => schemaDir === w || schemaDir.startsWith(w + path.sep));
     if (!inside) collect(schemaDir);
+  }
+  if (valuesOpt !== null) {
+    const valuesDir = path.dirname(path.resolve(dir, valuesOpt));
+    const inside = [...watchDirs].some(w => valuesDir === w || valuesDir.startsWith(w + path.sep));
+    if (!inside) collect(valuesDir);
   }
 
   const watchers = [];
