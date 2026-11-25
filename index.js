@@ -125,7 +125,7 @@ const KNOWN_RULE_OPTIONS = new Set([
 // Issue #250: option names `validateEnv` accepts — a typo'd option must fail
 // fast instead of running silently as if it was never passed (same class of
 // bug as #218, one layer up: there the rule options, here the options object).
-const KNOWN_VALIDATE_OPTIONS = new Set(['throwOnError', 'strict', 'onWarn', 'formatError']);
+const KNOWN_VALIDATE_OPTIONS = new Set(['throwOnError', 'strict', 'onWarn', 'formatError', 'rules']);
 // `loadEnv` forwards its validateEnv options, plus its own file options.
 const KNOWN_LOAD_ENV_OPTIONS = new Set([
   ...KNOWN_VALIDATE_OPTIONS, 'path', 'paths', 'env', 'override', 'assign',
@@ -1038,7 +1038,7 @@ function validateEnvCore(schema, env, options, valueSources) {
   // { throwOnError: false }, like schema errors.
   for (const opt of Object.keys(options)) {
     if (!KNOWN_VALIDATE_OPTIONS.has(opt)) {
-      throw new EnvSaafError([`unknown option "${opt}" (validateEnv accepts: throwOnError, strict, onWarn, formatError)`]);
+      throw new EnvSaafError([`unknown option "${opt}" (validateEnv accepts: throwOnError, strict, onWarn, formatError, rules)`]);
     }
   }
   // Reject a malformed schema before looking at any values, so a typo on an
@@ -1053,6 +1053,14 @@ function validateEnvCore(schema, env, options, valueSources) {
   const { flat, groupOf } = flattenSchema(schema);
   if (options.formatError !== undefined && typeof options.formatError !== 'function') {
     throw new TypeError('env-saaf: "formatError" option must be a function');
+  }
+  if (options.rules !== undefined) {
+    const hooks = Array.isArray(options.rules) ? options.rules : [options.rules];
+    for (let i = 0; i < hooks.length; i++) {
+      if (typeof hooks[i] !== 'function') {
+        throw new TypeError('env-saaf: "rules" option must be a function or an array of functions');
+      }
+    }
   }
   const warn = options.onWarn || ((msg) => console.warn(msg));
   if (options.strict) {
@@ -1389,6 +1397,24 @@ function validateEnvCore(schema, env, options, valueSources) {
       : refVal === cond.equals;
     if (matched) pushErr(`${key}: missing required variable`, undefined);
   }
+  // Issue #346: cross-field hooks receive the complete, typed, re-nested
+  // result. Skip them when an earlier check failed so they never inspect a
+  // partial result. A hook's own messages are global diagnostics (no key/source).
+  if (errors.length === 0 && options.rules !== undefined) {
+    const hookEnv = Object.freeze(groupOf.size ? nestGroups(out, groupOf) : out);
+    const hooks = Array.isArray(options.rules) ? options.rules : [options.rules];
+    for (const hook of hooks) {
+      const returned = hook(hookEnv);
+      if (returned === undefined || returned === null) continue;
+      const messages = Array.isArray(returned) ? returned : [returned];
+      for (const message of messages) {
+        if (typeof message !== 'string') {
+          throw new TypeError('env-saaf: each "rules" hook must return a string, an array of strings, or nothing');
+        }
+        if (message.length > 0) pushErr(message, undefined);
+      }
+    }
+  }
   // Non-throwing mode lives in the public wrapper below; the core always
   // returns both the values and the errors (issue #55).
   return { out, errors, groupOf, errorSources };
@@ -1489,7 +1515,7 @@ function* loadEnvSteps(schema, options) {
   // obvious at the call site.
   for (const opt of Object.keys(options)) {
     if (!KNOWN_LOAD_ENV_OPTIONS.has(opt)) {
-      throw new EnvSaafError([`unknown option "${opt}" (loadEnv accepts: path, paths, env, override, assign, throwOnError, strict, onWarn, formatError)`]);
+      throw new EnvSaafError([`unknown option "${opt}" (loadEnv accepts: path, paths, env, override, assign, throwOnError, strict, onWarn, formatError, rules)`]);
     }
   }
   // One file or several: `path` may be a string or an array of strings, or
