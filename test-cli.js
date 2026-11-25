@@ -99,10 +99,10 @@ try {
     const dir = mkProject({ 'src/app.js': 'console.log(process.env.PORT);\n', '.env.example': 'PORT=\n' });
     const parsed = JSON.parse(run(['check', dir, '--json'], dir).stdout);
     assert.deepStrictEqual(parsed, {
-      ok: true, missing: [], extra: [], unused: [], invalid: [], envExtra: [], envMissing: [],
+      ok: true, missing: [], extra: [], unused: [], invalid: [], envExtra: [], envMissing: [], exampleSecrets: [],
     });
     assert.strictEqual(typeof parsed.ok, 'boolean');
-    for (const field of ['missing', 'extra', 'unused', 'invalid', 'envExtra', 'envMissing']) {
+    for (const field of ['missing', 'extra', 'unused', 'invalid', 'envExtra', 'envMissing', 'exampleSecrets']) {
       assert.ok(Array.isArray(parsed[field]), `${field} must be an array`);
     }
   }
@@ -117,7 +117,7 @@ try {
     });
     const parsed = JSON.parse(run(['check', dir, '--schema', 'env.schema.js', '--json'], dir).stdout);
     assert.deepStrictEqual(Object.keys(parsed).sort(), [
-      'documentedNotInSchema', 'envExtra', 'envMissing', 'extra', 'invalid', 'missing', 'ok',
+      'documentedNotInSchema', 'envExtra', 'envMissing', 'exampleSecrets', 'extra', 'invalid', 'missing', 'ok',
       'schemaNotDocumented', 'unused',
     ]);
     assert.deepStrictEqual(parsed.schemaNotDocumented, []);
@@ -133,6 +133,71 @@ try {
     for (const field of ['missing', 'extra', 'unused', 'invalid', 'envExtra', 'envMissing']) {
       for (const item of parsed[field]) assert.strictEqual(typeof item, 'string', `${field} holds strings`);
     }
+    assert.deepStrictEqual(parsed.exampleSecrets, []);
+  }
+
+  // --- check: secret-like values in .env.example are reported without disclosure (#416)
+  {
+    const fakeSecrets = {
+      OPENAI_API_KEY: 'sk-' + 'A'.repeat(32),
+      AWS_ACCESS_KEY_ID: 'AKIA' + '1234567890ABCDEF',
+      DATABASE_URL: 'postgres://app:db-secret-fragment@db.example.test:5432/app',
+      GIT_TOKEN: 'deadbeef'.repeat(5),
+      SESSION_TOKEN: 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
+    };
+    const keys = Object.keys(fakeSecrets);
+    const template = [
+      ...Object.entries(fakeSecrets).map(([key, value]) => \`\${key}=\${value}\`),
+      'API_KEY=your-key-here',
+      'EXAMPLE_TOKEN=<redacted>',
+      'DEBUG_TOKEN=xxx',
+      'DATABASE_URL_SAMPLE=postgres://user:password@localhost/app',
+      '',
+    ].join('\n');
+    const code = \`console.log(\${keys.concat(['API_KEY', 'EXAMPLE_TOKEN', 'DEBUG_TOKEN', 'DATABASE_URL_SAMPLE'])
+      .map(key => \`process.env.\${key}\`).join(', ')});\n\`;
+    const dir = mkProject({ 'src/app.js': code, '.env.example': template });
+
+    const jsonRun = run(['check', dir, '--json'], dir);
+    assert.strictEqual(jsonRun.status, 1);
+    assert.strictEqual(jsonRun.stderr, '');
+    const parsed = JSON.parse(jsonRun.stdout);
+    assert.strictEqual(parsed.ok, false);
+    assert.deepStrictEqual(parsed.exampleSecrets, [
+      { key: 'OPENAI_API_KEY', reason: 'provider key', value: '[REDACTED]' },
+      { key: 'AWS_ACCESS_KEY_ID', reason: 'AWS access key', value: '[REDACTED]' },
+      { key: 'DATABASE_URL', reason: 'database URL with password', value: '[REDACTED]' },
+      { key: 'GIT_TOKEN', reason: '40-character hex token', value: '[REDACTED]' },
+      { key: 'SESSION_TOKEN', reason: 'high-entropy string', value: '[REDACTED]' },
+    ]);
+    for (const secret of Object.values(fakeSecrets)) {
+      assert.ok(!jsonRun.stdout.includes(secret), 'secret value leaked in --json output');
+    }
+    assert.ok(!jsonRun.stdout.includes('db-secret-fragment'));
+
+    const textRun = run(['check', dir], dir);
+    assert.strictEqual(textRun.status, 1);
+    assert.match(textRun.stdout, /SECRET-LIKE VALUE in \.env\.example: OPENAI_API_KEY/);
+    assert.match(textRun.stdout, /value redacted/);
+    for (const secret of Object.values(fakeSecrets)) {
+      assert.ok(!textRun.stdout.includes(secret), 'secret value leaked in text output');
+    }
+
+    // Placeholder values, including a credential-shaped database URL with a
+    // conventional placeholder password, must not create false positives.
+    const placeholders = mkProject({
+      'src/app.js': 'console.log(process.env.API_KEY, process.env.EXAMPLE_TOKEN, process.env.DEBUG_TOKEN, process.env.DATABASE_URL);\n',
+      '.env.example': [
+        'API_KEY=sk-your-key-here',
+        'EXAMPLE_TOKEN=<redacted>',
+        'DEBUG_TOKEN=xxx',
+        'DATABASE_URL=postgres://user:password@localhost/app',
+        '',
+      ].join('\n'),
+    });
+    const clean = run(['check', placeholders, '--json'], placeholders);
+    assert.strictEqual(clean.status, 0, clean.stdout + clean.stderr);
+    assert.deepStrictEqual(JSON.parse(clean.stdout).exampleSecrets, []);
   }
 
   {
