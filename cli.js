@@ -456,6 +456,11 @@ function readEnvFile(filePath) {
 // must never be echoed to text output or the --json result.
 const PLACEHOLDER_VALUE_RE = /^(?:<[^>]+>|x{3,}|xxx+|your(?:[-_ ]|$)|replace(?:[-_ ]|$)|change(?:[-_ ]|$)|changeme$|example(?:[-_ ]|$)|placeholder(?:[-_ ]|$)|dummy(?:[-_ ]|$)|todo$|redacted$|none$|null$|undefined$)/i;
 
+function isPlaceholderValue(value) {
+  return PLACEHOLDER_VALUE_RE.test(value)
+    || /^(?:pass|password|passwd|secret|changeme|change-me|example|placeholder|redacted|xxx+)$/i.test(value);
+}
+
 function stringEntropy(value) {
   const counts = new Map();
   for (const char of value) counts.set(char, (counts.get(char) || 0) + 1);
@@ -472,20 +477,26 @@ function detectExampleSecrets(values) {
   for (const [key, raw] of Object.entries(values)) {
     if (typeof raw !== 'string') continue;
     const value = raw.trim();
-    if (!value || PLACEHOLDER_VALUE_RE.test(value)) continue;
+    if (!value || isPlaceholderValue(value)) continue;
 
     let reason;
-    if (/^sk-[A-Za-z0-9_-]{16,}$/.test(value)) {
+    if (/^sk-[A-Za-z0-9_-]{16,}$/.test(value) && !isPlaceholderValue(value.slice(3))) {
       reason = 'provider key';
     } else if (/^AKIA[0-9A-Z]{16}$/.test(value)) {
       reason = 'AWS access key';
-    } else if (/^postgres(?:ql)?:\/\/[^\s/:@]+:([^\s/@]+)@/i.test(value)) {
-      reason = 'database URL with password';
-    } else if (/^[A-Fa-f0-9]{40}$/.test(value)) {
+    } else {
+      const databaseUrl = /^postgres(?:ql)?:\/\/[^\s/:@]+:([^\s/@]+)@/i.exec(value);
+      if (databaseUrl && !isPlaceholderValue(databaseUrl[1])) {
+        reason = 'database URL with password';
+      }
+    }
+    if (!reason && /^[A-Fa-f0-9]{40}$/.test(value)) {
       reason = '40-character hex token';
-    } else if (value.length >= 32 && stringEntropy(value) >= 3.8) {
+    } else if (!reason && value.length >= 32 && stringEntropy(value) >= 3.8) {
       reason = 'high-entropy string';
     }
+    /*
+    */
 
     if (reason) findings.push({ key, reason, value: '[REDACTED]' });
   }
