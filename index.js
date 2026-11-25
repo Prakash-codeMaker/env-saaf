@@ -2076,11 +2076,30 @@ const SCAN_SKIP_DIRECTORIES = new Set([
 
 function listScanFiles(dir) {
   const files = [];
+  // A real path is walked once, so a symlinked package is included but a
+  // symlink cycle cannot loop forever (issue #339).
+  const visited = new Set();
   const walk = (d) => {
+    let real;
+    try {
+      real = fs.realpathSync(d);
+    } catch {
+      return;
+    }
+    if (visited.has(real)) return;
+    visited.add(real);
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       if (SCAN_SKIP_DIRECTORIES.has(e.name) || e.name.startsWith('.git')) continue;
       const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p);
+      let isDirectory = e.isDirectory();
+      if (!isDirectory && e.isSymbolicLink()) {
+        try {
+          isDirectory = fs.statSync(p).isDirectory();
+        } catch {
+          continue;   // a broken link is not an error for the scan
+        }
+      }
+      if (isDirectory) walk(p);
       else if (SCAN_EXTENSIONS.test(e.name)) files.push(p);
     }
   };
