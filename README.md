@@ -942,6 +942,8 @@ npx env-saaf init . --from-example  # infer the starter schema from an existing 
 npx env-saaf init . --from-example --groups  # fold keys sharing a prefix into a grouped schema
 ```
 
+`check` also flags likely credentials in the selected example file: provider-style `sk-` keys, AWS access-key IDs, database URLs with passwords, 40-character hex tokens and long high-entropy values. Findings name the variable and redact its value in both text and `--json` output. Empty values and common placeholders are ignored. This is a heuristic guardrail, not a replacement for a dedicated secret scanner.
+
 ### Project configuration
 
 Repeat the same flags on every invocation? Declare the defaults once in the project's `package.json`, under an `env-saaf` key:
