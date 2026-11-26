@@ -1175,9 +1175,9 @@ function maskSensitiveMessage(msg, raw, val, sensitive) {
   return msg;
 }
 
-// Core of validateEnv: validates the schema (issue #228 groups included),
-// coerces every env value against the FLATTENED rules, and returns the flat
-// result plus the group map so callers can re-nest. Never throws EnvSaafError.
+// Core of validateEnv: validates schema and env arguments, coerces every env value
+// against the FLATTENED rules, and returns the flat result plus the group map
+// so callers can re-nest. Value validation errors are collected for the public wrapper.
 // Issue #350: optional `valueSources` maps each env key whose merged value
 // came from a loaded file to that path. Errors carry a parallel `errorSources`
 // entry for the *selected* input origin (alias winner, not merely the schema
