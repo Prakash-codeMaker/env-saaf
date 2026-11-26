@@ -70,6 +70,7 @@ const TYPE_EXAMPLES = {
   email: 'user@example.com',
   number: '3.14',
   int: '42',
+  bigint: '9007199254740993',
   json: '{"key":"value"}',
   boolean: 'true/false, yes/no, on/off, 1/0, y/n',
   url: 'https://example.com',
@@ -401,6 +402,15 @@ function validateSchemaRules(schema, warn, patterns = new Map(), prefix = '', an
           errors.push(`${key}: "min" must not exceed "max"`);
         }
       }
+    } else if (effectiveType === 'bigint') {
+      for (const opt of ['min', 'max']) {
+        if (rule[opt] !== undefined && typeof rule[opt] !== 'bigint') {
+          errors.push(`${key}: "${opt}" must be a bigint (e.g. 9007199254740993n)`);
+        }
+      }
+      if (typeof rule.min === 'bigint' && typeof rule.max === 'bigint' && rule.min > rule.max) {
+        errors.push(`${key}: "min" must not exceed "max"`);
+      }
     } else if (usesDurationBounds(rule)) {
       const parsed = {};
       for (const opt of ['min', 'max']) {
@@ -468,7 +478,7 @@ function validateSchemaRules(schema, warn, patterns = new Map(), prefix = '', an
       const choiceType = effectiveType === 'array' ? (rule.of || 'string') : effectiveType;
       if (choiceType === 'date') {
         errors.push(`${key}: "choices" cannot be used with type 'date' (a parsed date is a new Date object, so no choice can ever match)`);
-      } else if (['number', 'int', 'port', 'boolean', 'duration'].includes(choiceType)) {
+      } else if (['number', 'int', 'bigint', 'port', 'boolean', 'duration'].includes(choiceType)) {
         for (const choice of rule.choices) {
           if (typeof choice === 'number' && !Number.isFinite(choice)) continue;
           let matches = false;
@@ -743,6 +753,17 @@ function coerce(key, raw, type, trim = true, protocols, sensitive = false, of = 
       const n = decimalNumber(digits);
       if (v === '' || !Number.isFinite(n) || !Number.isInteger(n)) throw new Error(`${key}: expected an integer (e.g. ${TYPE_EXAMPLES.int}), got "${shown}"`);
       return n;
+    }
+    case 'bigint': {
+      // Parse decimal text directly as BigInt. Never route it through Number:
+      // that would round values above Number.MAX_SAFE_INTEGER.
+      if (typeof v === 'bigint') return v;
+      const digits = typeof v === 'string' ? stripNumericUnderscores(v) : v;
+      if (typeof v !== 'string' || !/^[+-]?\d+$/.test(String(digits).trim())) {
+        throw new Error(`${key}: expected a bigint (e.g. ${TYPE_EXAMPLES.bigint}), got "${shown}"`);
+      }
+      try { return BigInt(String(digits).trim()); }
+      catch { throw new Error(`${key}: expected a bigint (e.g. ${TYPE_EXAMPLES.bigint}), got "${shown}"`); }
     }
     case 'json': {
       // Structured config in one variable: '{"beta":true,"maxItems":3}'.
@@ -1034,6 +1055,11 @@ function verifyTransformedType(key, val, type, protocols, sensitive, of) {
         throw new Error(`${key}: expected an integer (e.g. ${TYPE_EXAMPLES.int}), got "${shown}"`);
       }
       return val;
+    case 'bigint':
+      if (typeof val !== 'bigint') {
+        throw new Error(`${key}: expected a bigint (e.g. ${TYPE_EXAMPLES.bigint}), got "${shown}"`);
+      }
+      return val;
     case 'port':
       if (typeof val !== 'number' || !Number.isInteger(val) || val < 0 || val > 65535) {
         throw new Error(`${key}: expected a port (0-65535, e.g. ${TYPE_EXAMPLES.port}), got "${shown}"`);
@@ -1267,6 +1293,18 @@ function validateEnvCore(schema, env, options, valueSources) {
           const shownItem = durationItems && sensitive ? maskValue(item) : item;
           const name = durationItems ? `${key}[${badIndex}]` : key;
           pushErr(`${name}: expected ${duration ? 'a duration' : 'a number'} ${range}, got "${shownItem}"`, valueSource());
+          continue;
+        }
+      }
+      // Issue #417: compare arbitrary-precision integers without converting
+      // either the value or its bounds through Number.
+      if (typeof val === 'bigint' && (rule.min !== undefined || rule.max !== undefined)) {
+        const lo = rule.min;
+        const hi = rule.max;
+        if ((lo !== undefined && val < lo) || (hi !== undefined && val > hi)) {
+          const range = lo !== undefined && hi !== undefined ? `between ${lo} and ${hi}`
+            : lo !== undefined ? `at least ${lo}` : `at most ${hi}`;
+          pushErr(`${key}: expected a bigint ${range}, got "${shown}"`, valueSource());
           continue;
         }
       }
@@ -2481,6 +2519,7 @@ const ARRAY_ITEM_EXAMPLES = {
   email: ['user@example.com', 'admin@example.com', 'dev@example.com'],
   number: ['1.5', '2.5', '3.5'],
   int: ['1', '2', '3'],
+  bigint: ['9007199254740993', '9007199254740994', '9007199254740995'],
   boolean: ['true', 'false', 'true'],
   url: ['https://a.example', 'https://b.example', 'https://c.example'],
   uuid: ['550e8400-e29b-41d4-a716-446655440000', '6ba7b810-9dad-11d1-80b4-00c04fd430c8', '7c9e6679-7425-40de-944b-e07fc1f90ae7'],
@@ -2732,9 +2771,15 @@ function scalarPlaceholder(rule, stringGrowth) {
     : type === 'date' ? '2026-01-31' : type === 'duration' ? '15m' : type === 'host' ? 'localhost'
     : type === 'file' ? './config.json'
     : type === 'email' ? 'user@example.com' : type === 'uuid' ? '550e8400-e29b-41d4-a716-446655440000'
-    : type === 'number' ? '3.14' : type === 'int' ? '42' : type === 'boolean' ? 'true'
+    : type === 'number' ? '3.14' : type === 'int' ? '42' : type === 'bigint' ? '9007199254740993' : type === 'boolean' ? 'true'
     : type === 'json' ? '{"key":"value"}' : type === 'base64' ? 'aGVsbG8=' : type === 'hex' ? 'deadbeef'
     : 'your_value_here';
+  if (type === 'bigint') {
+    let value = BigInt(placeholder);
+    if (typeof rule.min === 'bigint' && value < rule.min) value = rule.min;
+    if (typeof rule.max === 'bigint' && value > rule.max) value = rule.max;
+    return String(value);
+  }
   if (STRING_TYPES.has(type) && (rule.minLength !== undefined || rule.maxLength !== undefined)) {
     const limit = Math.min(MAX_STRING_EXAMPLE_LENGTH, placeholder.length + stringGrowth.remaining);
     const bounded = boundedStringPlaceholder(type, placeholder, rule, limit);
@@ -2856,6 +2901,7 @@ function generateExample(schema) {
 function jsonSchemaForScalar(type, protocols) {
   switch (type) {
     case 'int': return { type: 'integer' };
+    case 'bigint': return { type: 'string', pattern: '^[+-]?[0-9](?:_?[0-9])*$' };
     case 'port': return { type: 'integer', minimum: 0, maximum: 65535 };
     case 'number': return { type: 'number' };
     case 'duration': return { type: 'number', minimum: 0 };
@@ -2910,6 +2956,7 @@ function jsonSchemaDefault(key, rule, type) {
   const convert = (raw, valueType) => {
     if (valueType === 'json') return copyJsonDefault(coerce(key, raw, valueType, trim));
     if (valueType === 'date' && raw instanceof Date) return Date.prototype.toISOString.call(raw);
+    if (valueType === 'bigint') return String(coerce(key, raw, valueType, trim));
     if (!isJsonPrimitive(raw)) throw new TypeError('not a primitive default');
     if (valueType === 'date' && typeof raw === 'string' && raw.includes('T')
       && !/(?:Z|[+-]\d{2}:?\d{2})$/.test(trim ? raw.trim() : raw)) {
@@ -2989,7 +3036,10 @@ function jsonSchemaForRule(key, rule, required) {
     property.pattern = typeof pattern === 'string' ? pattern : pattern.source;
   }
   if (Array.isArray(rule.choices)) {
-    const choices = [...new Set(normalizedChoices(key, rule).filter(isJsonPrimitive))];
+    const choices = [...new Set(normalizedChoices(key, rule).map(choice =>
+      (type === 'bigint' || (type === 'array' && rule.of === 'bigint')) && typeof choice === 'bigint'
+        ? String(choice) : choice
+    ).filter(isJsonPrimitive))];
     if (choices.length) {
       // Issue #320: on an array rule the enum constrains each item. A
       // top-level enum would mean the whole array must equal a single choice.
