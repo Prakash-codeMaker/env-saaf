@@ -77,6 +77,7 @@ Environment inputs are strings. Output below is before an optional `transform`.
 | `string` | Any non-missing text (default type) | `string` | `trim`, `minLength`, `maxLength`, `pattern` (`RegExp` or string) |
 | `number` | Non-empty decimal text, including fractions and exponent notation. Rejects radix prefixes (`0x`, `0b`, `0o`), `NaN` and non-finite values. | `number` | `trim`, `min`, `max` |
 | `int` | Plain integer literal: optional sign + digits, e.g. `42`, `-3`, `007`. Decimal and scientific spellings (`1.0`, `1e3`) are rejected, as are radix prefixes | `number` | `trim`, `min`, `max` |
+| `bigint` | Signed decimal integer text, with optional underscores between digits. Rejects fractions, exponents and radix prefixes | `bigint` | `trim`, `min`, `max` (use `bigint` bounds) |
 | `boolean` | Case-insensitive `true/false`, `1/0`, `yes/no`, `on/off`, `y/n` | `boolean` | None |
 | `url` | Absolute URL accepted by `new URL()`, without normalization | `string` | `trim`, `minLength`, `maxLength`, `pattern`, `protocols` |
 | `file` | Path to an existing, readable regular file. Relative paths use the process working directory. | `string` | `trim`, `minLength`, `maxLength`, `pattern` |
@@ -408,6 +409,25 @@ const env = validateEnv({
 ```
 
 `int` is like `number` but only accepts plain integer literals — `42`, `-3` and `007` pass, while `3.5`, `1.0` and `1e3` fail (decimal and scientific spellings are not integer literals, even when the value happens to be whole). `port` follows the same rule. `min` and `max` work on `number`, `int` and `port`; either one can be used alone, and an out-of-range value is rejected with an error naming the allowed range.
+
+### `bigint` type — arbitrary-precision integers
+
+`bigint` parses signed decimal integer text directly with JavaScript's `BigInt`, so values above `Number.MAX_SAFE_INTEGER` keep every digit. Underscores are accepted only between digits (for example, `9_007_199_254_740_993`); fractions, exponents and radix-prefixed forms such as `0x10` are rejected. The returned value is a JavaScript `bigint`, not a `number`.
+
+Use `bigint` values for inclusive bounds too — write a BigInt literal with the `n` suffix so the schema itself does not lose precision:
+
+```js
+const env = validateEnv({
+  ORDER_ID: {
+    type: 'bigint',
+    min: 9007199254740993n,
+    max: 9007199254740999n,
+    required: true,
+  },
+});
+```
+
+`generateExample` suggests a value above the safe-integer limit and adjusts it to valid BigInt bounds. JSON Schema represents this type as a decimal string with a pattern, because JSON's number type cannot reliably represent arbitrary-precision integers.
 
 ### `date` type and `min`/`max` — chronological bounds
 
