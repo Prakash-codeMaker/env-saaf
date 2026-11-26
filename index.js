@@ -62,6 +62,22 @@ class EnvSaafError extends Error {
   }
 }
 
+// Schema and environment inputs are records, not arrays, primitives, or class instances.
+// Node's process.env has a special prototype, so it is accepted explicitly as an env input.
+function isPlainRecord(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+}
+
+function isEnvironmentRecord(value) {
+  return value === process.env || isPlainRecord(value);
+}
+
 // Format examples per built-in type, kept in one place so every type's error
 // message shows an example and schema validation cannot drift apart from
 // coercion when a new type is added (issue #58).
@@ -302,6 +318,9 @@ function validateSchema(schema) {
 }
 
 function validateSchemaRules(schema, warn, patterns = new Map(), prefix = '', ancestors = new Set(), isRoot = true) {
+  if (!isPlainRecord(schema)) {
+    throw invalidSchema([`${prefix || 'schema'}: expected an object mapping environment variable names to rules`]);
+  }
   if (ancestors.has(schema)) throw invalidSchema([`${prefix}: group "schema" contains a circular reference`]);
   ancestors = new Set(ancestors).add(schema);
   const errors = [];
@@ -309,7 +328,10 @@ function validateSchemaRules(schema, warn, patterns = new Map(), prefix = '', an
   const aliasOwners = new Map();
   for (const [name, rule] of Object.entries(schema)) {
     const key = prefix + name;
-    if (rule === null || typeof rule !== 'object' || Array.isArray(rule)) continue;
+    if (!isPlainRecord(rule)) {
+      errors.push(`${key}: rule must be an object`);
+      continue;
+    }
     // Issue #228: group rule — validate its shape, then its inner rules under
     // their full (prefixed) names so errors read `DB_HOST: ...`, not `HOST`.
     if (rule.schema !== undefined) {
@@ -325,7 +347,7 @@ function validateSchemaRules(schema, warn, patterns = new Map(), prefix = '', an
         errors.push(`${key}: group rule needs a non-empty string "prefix" (e.g. "DB_")`);
       }
       const inner = rule.schema;
-      if (inner === null || typeof inner !== 'object' || Array.isArray(inner)) {
+      if (!isPlainRecord(inner)) {
         errors.push(`${key}: group "schema" must be an object mapping inner names to rules`);
       } else {
         const innerKeys = Object.keys(inner);
@@ -1161,6 +1183,10 @@ function maskSensitiveMessage(msg, raw, val, sensitive) {
 // entry for the *selected* input origin (alias winner, not merely the schema
 // key); schema defaults and ambient-only values leave it unset.
 function validateEnvCore(schema, env, options, valueSources) {
+  if (!isEnvironmentRecord(env)) {
+    const message = 'env: expected an object mapping environment variable names to values';
+    throw new EnvSaafError([message], `Invalid environment argument:\n  - ${message}`);
+  }
   const out = {}; const errors = []; const errorSources = [];
   const pushErr = (message, source) => {
     errors.push(message);
@@ -1711,13 +1737,14 @@ async function loadEnvAsync(schema, options = {}) {
 
 // Yield each path in order so both loaders share parsing and error handling.
 function* loadEnvSteps(schema, options) {
-  if (schema === null || typeof schema !== 'object'
-    || (Object.getPrototypeOf(schema) !== Object.prototype && Object.getPrototypeOf(schema) !== null)) {
-    throw new TypeError(
-      "loadEnv expects a schema object as the first argument — did you mean loadEnv(schema, { path: '.env' })?"
-    );
-  }
+  // Validate the full schema before reading any files. validateEnvCore repeats
+  // this check after merging, but malformed schemas must not trigger file I/O.
+  validateSchemaRules(schema, () => {});
   const { path: pathOpt, paths: pathsOpt, env = process.env, override = false, assign = false, ...rest } = options;
+  if (!isEnvironmentRecord(env)) {
+    const message = 'env: expected an object mapping environment variable names to values';
+    throw new EnvSaafError([message], `Invalid environment argument:\n  - ${message}`);
+  }
   // Issue #250: reject a typo'd loadEnv option up front (e.g. `overide`),
   // before reading any file — the typo would otherwise flow through to
   // validateEnv as an unknown option, but the loadEnv names make the fix
