@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: `validateEnv`, `validateSchema` and `loadEnv` now reject non-object schema roots, invalid per-key rules and invalid environment objects with `EnvSaafError`, instead of silently skipping malformed rules or leaking `TypeError` (fixes #440).
+
 - Added: `bigint` type for exact integers beyond `Number.MAX_SAFE_INTEGER` (order IDs, snowflake IDs, wei amounts). It accepts plain integer literals with an optional sign (`9007199254740993`, `-3`, `007`, `1_000`) and returns a real `bigint`; decimals, exponents and radix prefixes are rejected. `min`/`max` take a bigint, an integer, or an integer string and are inclusive; `choices` compare as bigints and `array` rules accept `of: 'bigint'`. JSON Schema has no bigint, so `toJsonSchema` renders `{ type: 'string', pattern: '^-?[0-9]+$' }`, and `generateExample` emits a value above the safe-integer range (fixes #417).
 
 - Added: `check` flags values in `.env.example` (or `--file`) that look like real secrets, including known credential shapes (`sk-...`, `AKIA...`, URLs with non-empty passwords, hex tokens) and long high-entropy strings. It exits `1`, names the key, redacts the value from output, and adds the key to `secrets` in `--json` while keeping empty values, common placeholders and `generateExample` outputs valid (fixes #416).
