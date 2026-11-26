@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added: `bigint` type for arbitrary-precision integer environment values. Signed decimal text (including valid digit separators) is parsed directly to JavaScript `bigint`; BigInt `min`/`max` bounds stay exact, generated examples round-trip, JSON Schema uses a patterned decimal string, and TypeScript inference returns `bigint` (fixes #417).
+
+
 - Added: `check` flags values in `.env.example` (or `--file`) that look like real secrets, including known credential shapes (`sk-...`, `AKIA...`, URLs with non-empty passwords, hex tokens) and long high-entropy strings. It exits `1`, names the key, redacts the value from output, and adds the key to `secrets` in `--json` while keeping empty values, common placeholders and `generateExample` outputs valid (fixes #416).
 
 - Docs: list the shared conflictsWith and description options in the four translated READMEs.
