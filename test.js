@@ -3037,6 +3037,43 @@ assert.deepStrictEqual(
   assert.throws(() => validateEnv({ K: { type: 'number', max: 'x' } }, {}), /"max"/);
   assert.throws(() => validateEnv({ K: { type: 'hex', length: 'x' } }, {}), /"length"/);
 
+  // Non-object rules must never silently disable validation.
+  for (const rule of ['port', 3000, [], null]) {
+    assert.throws(
+      () => validateEnv({ PORT: rule }, { PORT: 'abc' }),
+      err => err instanceof EnvSaafError && err.errors.includes('PORT: rule must be an object'),
+    );
+  }
+  assert.throws(
+    () => validateEnv({ DB: { prefix: 'DB_', schema: { PORT: 'port' } } }, { DB_PORT: 'abc' }),
+    err => err instanceof EnvSaafError && err.errors.includes('DB_PORT: rule must be an object'),
+  );
+
+  // Invalid schema roots fail consistently through validateEnv, validateSchema, and loadEnv.
+  for (const schema of [null, 'nope', [], 42]) {
+    assert.throws(
+      () => validateEnv(schema, {}),
+      err => err instanceof EnvSaafError && err.errors[0].startsWith('schema:'),
+    );
+    assert.throws(
+      () => validateSchema(schema),
+      err => err instanceof EnvSaafError && err.errors[0].startsWith('schema:'),
+    );
+    assert.throws(
+      () => loadEnv(schema),
+      err => err instanceof EnvSaafError && err.errors[0].startsWith('schema:'),
+    );
+  }
+
+  // Invalid env arguments fail with EnvSaafError before any values are read.
+  for (const env of [null, 'nope', [], 42]) {
+    const isEnvError = err => err instanceof EnvSaafError && err.errors[0].startsWith('env:');
+    assert.throws(() => validateEnv({ PORT: { type: 'port' } }, env), isEnvError);
+    assert.throws(() => loadEnv({ PORT: { type: 'port' } }, { env }), isEnvError);
+  }
+  // The special Node process.env object remains a supported default.
+  assert.doesNotThrow(() => validateEnv({ OPTIONAL: {} }));
+
   // Valid rules still validate and coerce exactly as before.
   assert.strictEqual(validateEnv({ OK: { type: 'int', required: true } }, { OK: '42' }).OK, 42);
 }
