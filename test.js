@@ -279,6 +279,61 @@ const { loadEnv, validateEnv, validateSchema, EnvSaafError, parseEnvFile, scanCo
   }
 }
 
+// Issue #417: arbitrary-precision integers never pass through Number().
+{
+  const min = 9007199254740993n;
+  const max = 9007199254740995n;
+  const schema = { ORDER_ID: { type: 'bigint', min, max } };
+
+  assert.strictEqual(validateEnv(schema, { ORDER_ID: '9007199254740994' }).ORDER_ID, 9007199254740994n);
+  assert.strictEqual(validateEnv({ ID: { type: 'bigint' } }, { ID: '+9_007_199_254_740_993' }).ID, min);
+  assert.strictEqual(validateEnv({ ID: { type: 'bigint', default: min } }, {}).ID, min);
+  assert.throws(() => validateEnv(schema, { ORDER_ID: '9007199254740992' }), /expected a bigint at least 9007199254740993/);
+  assert.throws(() => validateEnv(schema, { ORDER_ID: '9007199254740996' }), /expected a bigint between 9007199254740993 and 9007199254740995/);
+  for (const raw of ['1.0', '1e3', '0x10', 'abc', '1__0', '_10', '10_']) {
+    assert.throws(() => validateEnv({ ID: { type: 'bigint' } }, { ID: raw }), /expected a bigint/);
+  }
+  assert.throws(() => validateEnv({ ID: { type: 'bigint' } }, { ID: 9007199254740992 }), /expected a bigint/);
+
+  for (const bound of [1, '1', 1.5, null, {}]) {
+    assert.throws(() => validateSchema({ ID: { type: 'bigint', min: bound } }), /must be a bigint/);
+    assert.throws(() => validateSchema({ ID: { type: 'bigint', max: bound } }), /must be a bigint/);
+  }
+  assert.throws(() => validateSchema({ ID: { type: 'bigint', min: 2n, max: 1n } }), /min.*must not exceed.*max/);
+  assert.strictEqual(validateEnv({ ID: { type: 'bigint', choices: [min, max] } }, { ID: String(max) }).ID, max);
+  assert.throws(() => validateEnv({ ID: { type: 'bigint', choices: [min] } }, { ID: String(max) }), /expected one of/);
+  assert.strictEqual(validateEnv({ ID: { type: 'bigint', transform: value => value + 1n } }, { ID: String(min) }).ID, min + 1n);
+
+  const arraySchema = { IDS: { type: 'array', of: 'bigint' } };
+  assert.deepStrictEqual(validateEnv(arraySchema, { IDS: '9007199254740993,9007199254740994' }).IDS,
+    [9007199254740993n, 9007199254740994n]);
+
+  const exampleSchema = {
+    ID: { type: 'bigint' },
+    FLOOR: { type: 'bigint', min: 9007199254741000n },
+    IDS: { type: 'array', of: 'bigint' },
+  };
+  const example = parseEnvFile(generateExample(exampleSchema));
+  assert.strictEqual(example.ID, '9007199254740993');
+  assert.strictEqual(example.FLOOR, '9007199254741000');
+  assert.deepStrictEqual(validateEnv(exampleSchema, example), {
+    ID: 9007199254740993n,
+    FLOOR: 9007199254741000n,
+    IDS: [9007199254740993n, 9007199254740994n, 9007199254740995n],
+  });
+
+  const schemaJson = toJsonSchema({
+    ID: { type: 'bigint', default: min, choices: [min, max] },
+    IDS: { type: 'array', of: 'bigint', default: [min, max], choices: [min, max] },
+  });
+  const pattern = '^[+-]?[0-9](?:_?[0-9])*$';
+  assert.deepStrictEqual(schemaJson.properties.ID,
+    { type: 'string', pattern, enum: [String(min), String(max)], default: String(min) });
+  assert.deepStrictEqual(schemaJson.properties.IDS,
+    { type: 'array', items: { type: 'string', pattern, enum: [String(min), String(max)] },
+      default: [String(min), String(max)] });
+}
+
 // Issue #296: a hand-rolled structural check for the draft 2020-12 keywords
 // env-saaf emits. Keeping the keyword map local means the whole exported
 // document is checked without adding a schema-validator dependency.
@@ -390,6 +445,7 @@ function assertDraft202012Schema(schema, path = '#', root = true) {
     string: { type: 'string' },
     number: { type: 'number' },
     int: { type: 'integer' },
+    bigint: { type: 'string', pattern: '^[+-]?[0-9](?:_?[0-9])*$' },
     boolean: { type: 'boolean' },
     url: { type: 'string', format: 'uri' },
     port: { type: 'integer', minimum: 0, maximum: 65535 },
