@@ -960,6 +960,8 @@ npx env-saaf init . --from-example  # infer the starter schema from an existing 
 npx env-saaf init . --from-example --groups  # fold keys sharing a prefix into a grouped schema
 ```
 
+When `--values` is supplied, `check` also reports keys in that file that are not documented in `.env.example` as `EXTRA in <file>`; this check is included in the exit code and the `envExtra` JSON field.
+
 ### Project configuration
 
 Repeat the same flags on every invocation? Declare the defaults once in the project's `package.json`, under an `env-saaf` key:
