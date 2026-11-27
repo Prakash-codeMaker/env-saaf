@@ -1185,11 +1185,13 @@ async function runCheck() {
   const envPath = path.join(dir, '.env');
   const envFileFound = fs.existsSync(envPath);
   let envExtra = [];
+  const envExtraByFile = [];
   let envMissing = [];
   if (envFileFound) {
     const envKeys = Object.keys(readEnvFile(envPath));
     const envDiff = diffEnv(envKeys, documented);
     envExtra = envDiff.usedNotDocumented;
+    if (envExtra.length) envExtraByFile.push({ file: '.env', keys: envExtra });
     envMissing = envDiff.documentedNotUsed;
   }
   // Issue #90: --schema validates the values of the real env file against the
@@ -1222,6 +1224,16 @@ async function runCheck() {
         if (jsonMode) console.log(JSON.stringify({ ok: false, error: message }));
         else console.error(message);
         fatalExit(2);
+      }
+      // Issue #494: apply the documented-key comparison to --values files too.
+      // Keep the .env comparison above when both files are present.
+      if (path.resolve(valuesPath) !== path.resolve(envPath)) {
+        const valuesDiff = diffEnv(Object.keys(readEnvFile(valuesPath)), documented);
+        const valuesExtra = valuesDiff.usedNotDocumented;
+        if (valuesExtra.length) {
+          envExtra = Array.from(new Set([...envExtra, ...valuesExtra]));
+          envExtraByFile.push({ file: valuesOpt, keys: valuesExtra });
+        }
       }
       targetName = valuesOpt;
     }
@@ -1314,7 +1326,7 @@ async function runCheck() {
     usedNotDocumented.forEach(k => console.log(`MISSING in ${fileOpt}: ${k} (used in code)`));
     documentedNotUsed.forEach(k => console.log(`UNUSED: ${k} (in ${fileOpt}, never used in code)`));
     secrets.forEach(k => console.log(`SECRET in ${fileOpt}: ${k} (value [REDACTED] looks like a real secret; use an empty value or placeholder)`));
-    envExtra.forEach(k => console.log(`EXTRA in .env: ${k} (not in ${fileOpt})`));
+    envExtraByFile.forEach(({ file, keys }) => keys.forEach(k => console.log(`EXTRA in ${file}: ${k} (not in ${fileOpt})`)));
     envMissing.forEach(k => console.log(`MISSING in .env: ${k} (in ${fileOpt}, not set locally)`));
     invalid.forEach(e => console.log(`INVALID${valuesOpt !== null ? ` in ${valuesOpt}` : ''}: ${e}`));
     schemaNotDocumented.forEach(k => console.log(`NOT DOCUMENTED: ${k} (in schema, missing from ${fileOpt})`));
