@@ -357,7 +357,7 @@ const starterKeys = ['APP_NAME', 'RETRIES', 'DEBUG', 'PORT', 'API_URL', 'SUPPORT
 // Issue #232: infer a starter rule type from a sample value found in an
 // existing example file. Priority order (first match wins): a port-looking
 // number -> 'port', true/false -> 'boolean', an http(s) URL -> 'url', an
-// email -> 'email', then the unambiguous shapes uuid/date/duration/semver/
+// email -> 'email', then the unambiguous shapes uuid/jwt/date/duration/semver/
 // json/hex (issue #356), an integer -> 'int', a decimal -> 'number', anything
 // else -> 'string' (including empty values). "Port-looking" means a whole
 // number in 1024-65535 — the range app servers actually listen on; smaller
@@ -377,6 +377,7 @@ function inferTypeFromSample(sample) {
     }
   };
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) && accepts('uuid')) return 'uuid';
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v) && accepts('jwt')) return 'jwt';
   if (/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(v) && accepts('date')) return 'date';
   if (/^(?:\d+(?:\.\d+)?(?:ms|s|m|h|d|w))+$/i.test(v) && accepts('duration')) return 'duration';
   if (/^v?(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(v) && accepts('semver')) return 'semver';
