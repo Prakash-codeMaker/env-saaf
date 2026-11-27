@@ -191,6 +191,30 @@ try {
     assert.match(again.stderr, /already exist/);
   }
 
+  // --- init --from-example infers JWT only when the token validates ---------
+  {
+    const jwtHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const jwtPayload = Buffer.from(JSON.stringify({ sub: '123', iat: 1 })).toString('base64url');
+    const validJwt = jwtHeader + '.' + jwtPayload + '.' + 's'.repeat(43);
+    const malformedPayload = Buffer.from('not-json').toString('base64url');
+    const dir = mkProject({
+      '.env.example':
+        'AUTH_TOKEN=' + validJwt + '\n' +
+        'MALFORMED_TOKEN=' + jwtHeader + '.' + malformedPayload + '.' + 's'.repeat(43) + '\n' +
+        'TWO_PART_TOKEN=' + jwtHeader + '.' + jwtPayload + '\n',
+    });
+
+    const init = run(['init', dir, '--from-example'], dir);
+    assert.strictEqual(init.status, 0, init.stderr);
+    const schema = fs.readFileSync(path.join(dir, 'env.schema.js'), 'utf8');
+    assert.ok(schema.includes("AUTH_TOKEN: { type: 'jwt' }"));
+    assert.ok(schema.includes("MALFORMED_TOKEN: { type: 'string' }"));
+    assert.ok(schema.includes("TWO_PART_TOKEN: { type: 'string' }"));
+
+    const check = run(['check', dir, '--file', '.env.example', '--schema', 'env.schema.js'], dir);
+    assert.strictEqual(check.status, 0, check.stdout + check.stderr);
+  }
+
   // --- init -> check round-trip in a "type": "module" project (issue #184) ---
   {
     const dir = mkProject({
