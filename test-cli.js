@@ -108,6 +108,40 @@ try {
     assert.ok(Array.isArray(parsed.invalid) && parsed.invalid.length === 1 && /PORT/.test(parsed.invalid[0]));
   }
 
+  // --- check --schema --values: undocumented keys fail just like .env extras ----
+  {
+    const dir = mkProject({
+      'src/app.js': SRC_WITH_USAGE,
+      '.env.example': EXAMPLE_BOTH,
+      'prod.env': 'PORT=3000\nDATABASE_URL=https://example.com\nEXTRA=zzz\nPORTT=4000\n',
+      'env.schema.js': "module.exports = { PORT: { type: 'port', required: true }, DATABASE_URL: { type: 'url', required: true } };\n",
+    });
+    const args = ['check', dir, '--schema', 'env.schema.js', '--values', 'prod.env'];
+    const plain = run(args, dir);
+    assert.strictEqual(plain.status, 1);
+    assert.match(plain.stdout, /EXTRA in prod\.env: EXTRA/);
+    assert.match(plain.stdout, /EXTRA in prod\.env: PORTT/);
+
+    const json = run([...args, '--json'], dir);
+    assert.strictEqual(json.status, 1);
+    const parsed = JSON.parse(json.stdout);
+    assert.strictEqual(parsed.ok, false);
+    assert.deepStrictEqual(parsed.envExtra.sort(), ['EXTRA', 'PORTT']);
+  }
+
+  // --- check --schema --values: a clean values file remains clean --------------
+  {
+    const dir = mkProject({
+      'src/app.js': SRC_WITH_USAGE,
+      '.env.example': EXAMPLE_BOTH,
+      'prod.env': 'PORT=3000\nDATABASE_URL=https://example.com\n',
+      'env.schema.js': "module.exports = { PORT: { type: 'port', required: true }, DATABASE_URL: { type: 'url', required: true } };\n",
+    });
+    const r = run(['check', dir, '--schema', 'env.schema.js', '--values', 'prod.env'], dir);
+    assert.strictEqual(r.status, 0);
+    assert.match(r.stdout, /all clean/);
+  }
+
   // --- check: missing .env.example exits 2 with a hint ----------------------
   {
     const dir = mkProject({ 'src/app.js': SRC_WITH_USAGE });
